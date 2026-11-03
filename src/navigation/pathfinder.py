@@ -1,6 +1,7 @@
-"""
+r"""
 Module: pathfinder.py
-Purpose: Provides pathfinding algorithms (Dijkstra and A*) on the campus graph.
+Purpose: Provides pathfinding algorithms (Dijkstra and A*) on the campus graph,
+         including dynamic pathway obstruction handling and rerouting.
 
 Discrete Mathematics Relevance:
 -------------------------------
@@ -19,22 +20,24 @@ Discrete Mathematics Relevance:
        h(n) = estimated heuristic cost from node n to the goal.
    - Heuristic used here: Euclidean Distance on a 2D plane:
      h(u, v) = sqrt((x_u - x_v)^2 + (y_u - y_v)^2)
-   - Admissibility: The straight-line Euclidean distance is always <= actual walking
-     path distance. Because h(n) never overestimates the true cost, A* is GUARANTEED
-     to return an optimal shortest path, just like Dijkstra, but typically explores
-     fewer nodes!
+   - Admissibility: Straight line is the shortest distance in Euclidean plane.
+
+3. Dynamic Edge Removal & Detour Calculation:
+   - When edges E_blocked are disrupted (construction, weather), the pathfinder
+     recomputes the shortest path on the induced subgraph G_detour = (V, E \ E_blocked).
 """
 
 import math
 import heapq
 import time
-from typing import List, Dict, Tuple, Optional, Any
+from typing import List, Dict, Tuple, Optional, Any, Set
 import networkx as nx
 
 
 class CampusPathfinder:
     """
-    Computes optimal paths on a campus graph using Dijkstra and A* algorithms.
+    Computes optimal paths on a campus graph using Dijkstra and A* algorithms,
+    with dynamic edge blocking and reroute analysis.
     """
 
     def __init__(self, graph: nx.Graph):
@@ -53,10 +56,6 @@ class CampusPathfinder:
         
         Formula:
             h(u, v) = sqrt( (x_u - x_v)^2 + (y_u - y_v)^2 )
-
-        Discrete Math Note:
-            This is an *admissible heuristic* because a straight line is the shortest
-            possible distance in a 2D Euclidean space. It never overestimates.
 
         Args:
             node_a: First building ID.
@@ -83,14 +82,7 @@ class CampusPathfinder:
             goal_node: Target building ID.
 
         Returns:
-            Dictionary with:
-            - 'path': List of node IDs in traversal order.
-            - 'path_names': List of human-readable building names.
-            - 'total_distance': Total walking distance in meters.
-            - 'walking_time_min': Estimated walking time in minutes.
-            - 'nodes_explored': Total number of nodes expanded (visited).
-            - 'execution_time_ms': Runtime in milliseconds.
-            - 'algorithm': 'Dijkstra'
+            Dictionary with path results and search metrics.
         """
         start_clock = time.perf_counter()
 
@@ -99,7 +91,6 @@ class CampusPathfinder:
         if goal_node not in self.graph:
             raise ValueError(f"Goal building '{goal_node}' does not exist in graph.")
 
-        # Special case: start is already goal
         if start_node == goal_node:
             name = self.graph.nodes[start_node].get("name", start_node)
             elapsed_ms = round((time.perf_counter() - start_clock) * 1000, 3)
@@ -288,11 +279,6 @@ class CampusPathfinder:
         """
         Executes both Dijkstra and A* to benchmark search efficiency side-by-side.
 
-        Discrete Math Relevance:
-            Empirically verifies:
-            1. Shortest distance equivalence: d_Dijkstra(u, v) == d_A*(u, v)
-            2. Heuristic search efficiency: nodes_visited_A* <= nodes_visited_Dijkstra
-
         Args:
             start_node: Origin building ID.
             goal_node: Target building ID.
@@ -314,4 +300,101 @@ class CampusPathfinder:
             "astar": astar_res,
             "optimal_match": optimal_match,
             "nodes_saved_by_astar": dijkstra_res.get("nodes_explored", 0) - astar_res.get("nodes_explored", 0)
+        }
+
+    def find_reroute_with_blocked_edges(
+        self,
+        start_node: str,
+        goal_node: str,
+        blocked_edges: List[Tuple[str, str]],
+        reason: str = "Temporary Maintenance / Construction"
+    ) -> Dict[str, Any]:
+        r"""
+        Evaluates route impact when specific pathways are blocked and computes a detour.
+
+        Discrete Math Concept:
+            Compares shortest path on G = (V, E) with shortest path on G' = (V, E \ E_blocked).
+
+        Args:
+            start_node: Origin building ID.
+            goal_node: Target building ID.
+            blocked_edges: List of (u, v) pairs representing closed walkways.
+            reason: Human-friendly disruption explanation (e.g. "Rain / Flooding").
+
+        Returns:
+            Dictionary with original route, updated detour, distance delta, and disruption details.
+        """
+        # Step 1: Compute original route on standard graph
+        original_res = self.find_shortest_path_astar(start_node, goal_node)
+        if "error" in original_res:
+            return {
+                "is_rerouted": False,
+                "reason": reason,
+                "error": original_res["error"],
+                "original_path": [],
+                "updated_path": []
+            }
+
+        # Normalize blocked edges set for quick checking
+        blocked_set: Set[Tuple[str, str]] = set()
+        for u, v in blocked_edges:
+            blocked_set.add((u, v))
+            blocked_set.add((v, u))
+
+        # Check if original path actually traverses any blocked edge
+        original_edges_traversed = []
+        for i in range(len(original_res["path"]) - 1):
+            e = (original_res["path"][i], original_res["path"][i + 1])
+            original_edges_traversed.append(e)
+
+        intersecting_blocked = [
+            e for e in original_edges_traversed if e in blocked_set
+        ]
+
+        # Step 2: Build detour graph by removing blocked edges
+        detour_graph = nx.Graph()
+        for n, data in self.graph.nodes(data=True):
+            detour_graph.add_node(n, **data)
+        for u, v, data in self.graph.edges(data=True):
+            if (u, v) not in blocked_set:
+                detour_graph.add_edge(u, v, **data)
+
+        # Step 3: Compute path on detour graph
+        detour_pathfinder = CampusPathfinder(detour_graph)
+        detour_res = detour_pathfinder.find_shortest_path_astar(start_node, goal_node)
+
+        if "error" in detour_res:
+            return {
+                "is_rerouted": True,
+                "path_blocked": True,
+                "reason": reason,
+                "blocked_edges": blocked_edges,
+                "intersecting_blocked_edges": intersecting_blocked,
+                "original_path": original_res["path"],
+                "original_distance": original_res["total_distance"],
+                "original_path_names": original_res["path_names"],
+                "updated_path": [],
+                "updated_distance": float("inf"),
+                "updated_path_names": [],
+                "distance_diff_m": float("inf"),
+                "error": f"Campus partition: All alternate routes to destination are blocked ({reason})."
+            }
+
+        is_rerouted = (original_res["path"] != detour_res["path"])
+        dist_diff = round(detour_res["total_distance"] - original_res["total_distance"], 2)
+
+        return {
+            "is_rerouted": is_rerouted,
+            "path_blocked": len(intersecting_blocked) > 0,
+            "reason": reason,
+            "blocked_edges": blocked_edges,
+            "intersecting_blocked_edges": intersecting_blocked,
+            "original_path": original_res["path"],
+            "original_distance": original_res["total_distance"],
+            "original_path_names": original_res["path_names"],
+            "updated_path": detour_res["path"],
+            "updated_distance": detour_res["total_distance"],
+            "updated_path_names": detour_res["path_names"],
+            "distance_diff_m": dist_diff,
+            "detour_time_diff_min": round(dist_diff / 84.0, 1)
         }

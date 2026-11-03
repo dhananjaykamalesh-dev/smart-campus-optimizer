@@ -6,10 +6,11 @@ Discrete Mathematics Relevance:
     Provides visual representations of:
     1. 2D geometric embedding of Campus Graph G = (V, E)
     2. Shortest paths computed by Dijkstra and A*
-    3. Resource allocation utilization and capacity distribution
+    3. Blocked edges E_blocked and detour paths G \ E_blocked
+    4. Resource allocation utilization and capacity distribution
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 import plotly.graph_objects as go
 import pandas as pd
 import networkx as nx
@@ -18,19 +19,23 @@ import networkx as nx
 def create_campus_map_figure(
     graph: nx.Graph,
     highlight_path: Optional[List[str]] = None,
-    accessible_only: bool = False
+    accessible_only: bool = False,
+    blocked_edges: Optional[List[Tuple[str, str]]] = None,
+    original_path: Optional[List[str]] = None
 ) -> go.Figure:
     """
-    Constructs an interactive Plotly Figure representing the campus graph.
+    Constructs an interactive Plotly Figure representing the campus graph,
+    supporting accessibility indicators, blocked pathways, and detour route overlays.
 
     Args:
-        graph: The NetworkX campus graph with 'x', 'y', 'name', 'category' for nodes,
-               and 'weight', 'is_accessible' for edges.
-        highlight_path: Optional list of building IDs representing a path to highlight.
-        accessible_only: Boolean flag indicating if only accessible edges are shown.
+        graph: NetworkX campus graph with coordinates and attributes.
+        highlight_path: Path node IDs to highlight (active route or detour).
+        accessible_only: Flag indicating if wheelchair ramp mode is active.
+        blocked_edges: List of (u, v) tuples representing closed walkways.
+        original_path: Optional original route prior to obstruction for comparison.
 
     Returns:
-        go.Figure: Interactive 2D campus map with nodes, edges, and path overlays.
+        go.Figure: Interactive 2D campus map.
     """
     fig = go.Figure()
 
@@ -45,10 +50,14 @@ def create_campus_map_figure(
         "Medical": "#00BBF9"         # Sky Blue
     }
 
-    # 1. Draw Normal Edges
-    normal_edge_x = []
-    normal_edge_y = []
+    # Normalize blocked edges set
+    blocked_set = set()
+    if blocked_edges:
+        for u, v in blocked_edges:
+            blocked_set.add((u, v))
+            blocked_set.add((v, u))
 
+    # Fast lookup for active path edges
     path_edges_set = set()
     if highlight_path and len(highlight_path) > 1:
         for i in range(len(highlight_path) - 1):
@@ -56,13 +65,23 @@ def create_campus_map_figure(
             path_edges_set.add((u, v))
             path_edges_set.add((v, u))
 
+    # Fast lookup for original path edges
+    original_edges_set = set()
+    if original_path and len(original_path) > 1:
+        for i in range(len(original_path) - 1):
+            u, v = original_path[i], original_path[i + 1]
+            original_edges_set.add((u, v))
+            original_edges_set.add((v, u))
+
+    # 1. Draw Normal Walkways
+    normal_edge_x = []
+    normal_edge_y = []
+
     for u, v, data in graph.edges(data=True):
+        if (u, v) in blocked_set or (u, v) in path_edges_set or (u, v) in original_edges_set:
+            continue
         pos_u = (graph.nodes[u]["x"], graph.nodes[u]["y"])
         pos_v = (graph.nodes[v]["x"], graph.nodes[v]["y"])
-
-        if (u, v) in path_edges_set:
-            continue
-
         normal_edge_x.extend([pos_u[0], pos_v[0], None])
         normal_edge_y.extend([pos_u[1], pos_v[1], None])
 
@@ -73,7 +92,7 @@ def create_campus_map_figure(
             y=normal_edge_y,
             mode="lines",
             line=dict(
-                color="#0077B6" if accessible_only else "#B0BEC5",
+                color="#0077B6" if accessible_only else "#CFD8DC",
                 width=3.0 if accessible_only else 2.5,
                 dash="solid"
             ),
@@ -83,14 +102,54 @@ def create_campus_map_figure(
         )
     )
 
-    # 2. Draw Highlighted Shortest Path
-    if highlight_path and len(highlight_path) > 1:
-        path_x = []
-        path_y = []
-        for node in highlight_path:
-            path_x.append(graph.nodes[node]["x"])
-            path_y.append(graph.nodes[node]["y"])
+    # 2. Draw Original Route (if disrupted and rerouted)
+    if original_path and len(original_path) > 1 and original_path != highlight_path:
+        orig_x = [graph.nodes[n]["x"] for n in original_path]
+        orig_y = [graph.nodes[n]["y"] for n in original_path]
+        fig.add_trace(
+            go.Scatter(
+                x=orig_x,
+                y=orig_y,
+                mode="lines",
+                line=dict(color="#78909C", width=3.5, dash="dash"),
+                hoverinfo="text",
+                text=[f"Original Path: {graph.nodes[n]['name']}" for n in original_path],
+                name="Original Route (Disrupted)",
+                showlegend=True
+            )
+        )
 
+    # 3. Draw Blocked Edges
+    if blocked_edges:
+        blocked_x = []
+        blocked_y = []
+        for u, v in blocked_edges:
+            if u in graph and v in graph:
+                pos_u = (graph.nodes[u]["x"], graph.nodes[u]["y"])
+                pos_v = (graph.nodes[v]["x"], graph.nodes[v]["y"])
+                blocked_x.extend([pos_u[0], pos_v[0], None])
+                blocked_y.extend([pos_u[1], pos_v[1], None])
+
+        fig.add_trace(
+            go.Scatter(
+                x=blocked_x,
+                y=blocked_y,
+                mode="lines+markers",
+                line=dict(color="#D90429", width=5.0, dash="dashdot"),
+                marker=dict(size=10, color="#D90429", symbol="x"),
+                hoverinfo="text",
+                text=["🚫 Blocked Pathway" for _ in blocked_x],
+                name="🚫 Closed Walkway",
+                showlegend=True
+            )
+        )
+
+    # 4. Draw Highlighted Active Route / Detour
+    if highlight_path and len(highlight_path) > 1:
+        path_x = [graph.nodes[n]["x"] for n in highlight_path]
+        path_y = [graph.nodes[n]["y"] for n in highlight_path]
+
+        route_label = "Detour Route" if (original_path and original_path != highlight_path) else "Calculated Route"
         fig.add_trace(
             go.Scatter(
                 x=path_x,
@@ -100,12 +159,12 @@ def create_campus_map_figure(
                 marker=dict(size=12, color="#FF6B35", symbol="circle"),
                 hoverinfo="text",
                 text=[f"Step {idx + 1}: {graph.nodes[n]['name']} ({n})" for idx, n in enumerate(highlight_path)],
-                name="Calculated Route",
+                name=route_label,
                 showlegend=True
             )
         )
 
-    # 3. Draw Nodes (Buildings)
+    # 5. Draw Nodes (Buildings)
     node_x = []
     node_y = []
     node_labels = []
@@ -165,7 +224,9 @@ def create_campus_map_figure(
         )
     )
 
-    mode_title_suffix = " (♿ Wheelchair / Ramp Mode)" if accessible_only else " (Standard Walkway Mode)"
+    mode_title_suffix = " (♿ Wheelchair Mode)" if accessible_only else " (Standard Mode)"
+    if blocked_edges:
+        mode_title_suffix += " • ⚠️ Pathway Obstructions Active"
 
     fig.update_layout(
         title=dict(
@@ -199,7 +260,7 @@ def create_campus_map_figure(
             xanchor="right",
             x=1
         ),
-        height=600
+        height=620
     )
 
     return fig
@@ -209,12 +270,6 @@ def create_utilization_bar_chart(summary_df: pd.DataFrame) -> go.Figure:
     """
     Renders a bar chart comparing classroom seat utilization across courses
     with threshold guidelines.
-
-    Args:
-        summary_df: DataFrame containing 'Course', 'Utilization %', 'Enrolled', 'Capacity'.
-
-    Returns:
-        go.Figure: Interactive Plotly bar chart with category coloring.
     """
     if summary_df.empty:
         return go.Figure()
@@ -251,7 +306,6 @@ def create_utilization_bar_chart(summary_df: pd.DataFrame) -> go.Figure:
         ]
     )
 
-    # Reference threshold lines for academic evaluation
     fig.add_hline(
         y=50,
         line_dash="dot",
@@ -283,12 +337,6 @@ def create_utilization_bar_chart(summary_df: pd.DataFrame) -> go.Figure:
 def create_capacity_vs_enrolled_chart(summary_df: pd.DataFrame) -> go.Figure:
     """
     Renders grouped bars showing Enrolled Students vs Room Capacity.
-
-    Args:
-        summary_df: DataFrame with 'Course', 'Enrolled', 'Capacity', 'Room'.
-
-    Returns:
-        go.Figure: Grouped bar chart.
     """
     if summary_df.empty:
         return go.Figure()

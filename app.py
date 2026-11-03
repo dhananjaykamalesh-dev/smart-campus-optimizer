@@ -3,8 +3,8 @@ Main Web Application: Smart Campus Optimization System
 Built with Streamlit, NetworkX, Google OR-Tools CP-SAT, and Plotly.
 
 Discrete Mathematics Core Modules:
-- Tab 1: Campus Navigation (Dijkstra vs. A* Graph Search & Benchmarking)
-- Tab 2: Timetable Scheduling (Propositional Constraints with OR-Tools CP-SAT)
+- Tab 1: Campus Navigation (Dijkstra vs. A*, Accessibility & Dynamic Detour Rerouting)
+- Tab 2: Timetable Scheduling (Propositional Constraints, Disruption Simulation & Minimal Repair)
 - Tab 3: Resource Allocation & Space Utilization Metrics
 - Tab 4: Mathematical Concepts & Viva Defense Guide
 """
@@ -83,7 +83,7 @@ def main():
     st.title("🏫 Graph-Based Smart Campus Optimization System")
     st.markdown(
         "**Discrete Mathematics Project** • Graph Theory ($G=(V, E)$), Heuristic Search ($A^*$), "
-        "and Propositional Constraint Satisfaction (OR-Tools CP-SAT)."
+        "Dynamic Disruption Recovery, and Propositional Constraint Satisfaction (OR-Tools CP-SAT)."
     )
 
     # Initialize Graph and Data
@@ -111,7 +111,7 @@ def main():
 
     st.sidebar.markdown("---")
     st.sidebar.markdown(
-        "**Graph Properties**\n"
+        "**Graph Invariants**\n"
         f"- Type: **Undirected, Weighted ($w > 0$)**\n"
         f"- Accessible Paths: **{graph_summary['num_accessible_paths']}/{graph_summary['num_paths']}**\n"
         f"- Covered Walkways: **{graph_summary['num_covered_paths']}/{graph_summary['num_paths']}**\n"
@@ -131,13 +131,13 @@ def main():
     ])
 
     # -------------------------------------------------------------
-    # TAB 1: CAMPUS NAVIGATION
+    # TAB 1: CAMPUS NAVIGATION & DYNAMIC REROUTING
     # -------------------------------------------------------------
     with tab_nav:
-        st.subheader("Interactive Graph Navigation & Algorithm Benchmarking")
+        st.subheader("Interactive Graph Navigation & Dynamic Rerouting")
         st.markdown(
-            "Find the most efficient walking route between campus facilities. "
-            "Compare uniform-cost Dijkstra search against goal-directed $A^*$ heuristic search."
+            "Find optimal walking routes between campus facilities with support for "
+            "**wheelchair accessibility** and **temporary pathway obstructions**."
         )
 
         col1, col2 = st.columns([1, 2])
@@ -174,55 +174,122 @@ def main():
                 help="Filters graph to exclude stairways and steep slopes (e.g. bypasses stairs between Library and Activity Center)."
             )
 
-            # Accessibility mode indication banner
-            if accessible_only:
-                st.info("♿ **Accessibility Mode Active**: Routing strictly via ramps and step-free paths.")
-            else:
-                st.caption("🟢 **Standard Walkway Mode**: Includes stairs, sheltered walkways, and direct paths.")
+            # ---------------------------------------------------------
+            # DYNAMIC CAMPUS FEATURE: PATHWAY OBSTRUCTION SIMULATOR
+            # ---------------------------------------------------------
+            with st.expander("🚧 Simulate Pathway Obstruction (Detour Mode)", expanded=False):
+                enable_obstruction = st.checkbox(
+                    "Simulate Blocked Pathway",
+                    value=False,
+                    help="Temporarily removes a pathway to simulate construction, maintenance, or rain."
+                )
 
-            find_btn = st.button("🚀 Find Optimal Route", type="primary", use_container_width=True)
+                # Format edge options nicely
+                edge_options = {}
+                for u, v, d in campus_graph.graph.edges(data=True):
+                    name_u = campus_graph.graph.nodes[u]["name"]
+                    name_v = campus_graph.graph.nodes[v]["name"]
+                    label = f"{name_u} ↔ {name_v} ({u}-{v}, {d['weight']}m)"
+                    edge_options[label] = (u, v)
+
+                selected_edge_label = st.selectbox(
+                    "Select Blocked Pathway:",
+                    options=list(edge_options.keys()),
+                    index=2 if len(edge_options) > 2 else 0
+                )
+                selected_blocked_edge = edge_options[selected_edge_label]
+
+                block_reason = st.selectbox(
+                    "Reason for Closure:",
+                    options=[
+                        "Underground Cable Maintenance",
+                        "Monsoon Waterlogging & Flooding",
+                        "Pavement Resurfacing / Construction",
+                        "Peak Pedestrian Congestion"
+                    ]
+                )
+
+            find_btn = st.button("🚀 Calculate Route", type="primary", use_container_width=True)
 
         with col2:
-            active_graph = (
+            active_base_graph = (
                 campus_graph.get_accessible_subgraph()
                 if accessible_only
                 else campus_graph.graph
             )
-            pathfinder = CampusPathfinder(active_graph)
+            pathfinder = CampusPathfinder(active_base_graph)
 
             route_result = None
-            comparison_result = None
+            reroute_data = None
             highlight_path = None
+            original_path_display = None
+            blocked_edges_to_draw = []
 
-            with st.spinner("Computing optimal graph path..."):
+            with st.spinner("Calculating optimal graph route..."):
                 if start_id == goal_id:
                     st.warning("⚠️ Origin and Destination are the same building! Distance is 0 meters.")
                     highlight_path = [start_id]
                 else:
                     try:
-                        if algorithm_choice == "Compare Both Side-by-Side":
-                            comparison_result = pathfinder.compare_algorithms(start_id, goal_id)
-                            route_result = comparison_result["astar"]
-                        elif "Dijkstra" in algorithm_choice:
-                            route_result = pathfinder.find_shortest_path_dijkstra(start_id, goal_id)
+                        if enable_obstruction:
+                            blocked_edges_to_draw = [selected_blocked_edge]
+                            reroute_data = pathfinder.find_reroute_with_blocked_edges(
+                                start_node=start_id,
+                                goal_node=goal_id,
+                                blocked_edges=blocked_edges_to_draw,
+                                reason=block_reason
+                            )
+                            if "error" in reroute_data:
+                                st.error(f"❌ {reroute_data['error']}")
+                            else:
+                                route_result = {
+                                    "path": reroute_data["updated_path"],
+                                    "path_names": reroute_data["updated_path_names"],
+                                    "total_distance": reroute_data["updated_distance"],
+                                    "walking_time_min": round(reroute_data["updated_distance"] / 84.0, 1),
+                                    "nodes_explored": len(reroute_data["updated_path"])
+                                }
+                                highlight_path = reroute_data["updated_path"]
+                                original_path_display = reroute_data["original_path"]
                         else:
-                            route_result = pathfinder.find_shortest_path_astar(start_id, goal_id)
+                            if algorithm_choice == "Compare Both Side-by-Side":
+                                comp = pathfinder.compare_algorithms(start_id, goal_id)
+                                route_result = comp["astar"]
+                            elif "Dijkstra" in algorithm_choice:
+                                route_result = pathfinder.find_shortest_path_dijkstra(start_id, goal_id)
+                            else:
+                                route_result = pathfinder.find_shortest_path_astar(start_id, goal_id)
 
-                        if route_result and "error" in route_result:
-                            st.error(f"❌ {route_result['error']}")
-                            highlight_path = None
-                        elif route_result:
-                            highlight_path = route_result["path"]
+                            if route_result and "error" in route_result:
+                                st.error(f"❌ {route_result['error']}")
+                            elif route_result:
+                                highlight_path = route_result["path"]
                     except Exception as e:
-                        st.error(f"❌ Pathfinding Error: {str(e)}")
-                        highlight_path = None
+                        st.error(f"❌ Error during path calculation: {str(e)}")
 
             fig = create_campus_map_figure(
-                graph=active_graph,
+                graph=active_base_graph,
                 highlight_path=highlight_path,
-                accessible_only=accessible_only
+                accessible_only=accessible_only,
+                blocked_edges=blocked_edges_to_draw if enable_obstruction else None,
+                original_path=original_path_display
             )
             st.plotly_chart(fig, use_container_width=True)
+
+        # Reroute Alert Banner (if obstruction active)
+        if enable_obstruction and reroute_data and "error" not in reroute_data:
+            if reroute_data["path_blocked"]:
+                st.warning(
+                    f"⚠️ **Detour Active**: The direct pathway was blocked due to **{reroute_data['reason']}**.\n\n"
+                    f"- Original Path Distance: **{reroute_data['original_distance']} m**\n"
+                    f"- Updated Detour Distance: **{reroute_data['updated_distance']} m** (+{reroute_data['distance_diff_m']} m detour)\n"
+                    f"- Additional Walking Time: **+{reroute_data['detour_time_diff_min']} minutes**"
+                )
+            else:
+                st.info(
+                    f"ℹ️ The blocked pathway ({selected_edge_label}) did not intersect your optimal route. "
+                    f"Original path remained optimal!"
+                )
 
         # Route Metrics and Turn-by-Turn Directions
         if route_result and "error" not in route_result and len(route_result["path"]) > 1:
@@ -231,41 +298,37 @@ def main():
             m1.metric("🚶 Total Walk Distance", f"{route_result['total_distance']} m")
             m2.metric("⏱️ Estimated Walk Time", f"{route_result['walking_time_min']} min")
             m3.metric("📍 Number of Stops", f"{len(route_result['path'])}")
-            m4.metric("🔍 Nodes Explored", f"{route_result['nodes_explored']}")
+            m4.metric("🔍 Nodes in Route", f"{len(route_result['path'])}")
 
-            # ---------------------------------------------------------
-            # DIJKSTRA VS A* BENCHMARK COMPARISON SECTION
-            # ---------------------------------------------------------
-            st.markdown("### ⚖️ Algorithm Performance Benchmark: Dijkstra vs. A*")
-            comp = pathfinder.compare_algorithms(start_id, goal_id)
+            # Algorithm comparison section (if not in blocked mode)
+            if not enable_obstruction:
+                st.markdown("### ⚖️ Algorithm Performance Benchmark: Dijkstra vs. A*")
+                comp = pathfinder.compare_algorithms(start_id, goal_id)
 
-            b1, b2, b3 = st.columns(3)
-            b1.metric("Dijkstra Nodes Explored", comp["dijkstra"]["nodes_explored"])
-            b2.metric("A* Nodes Explored", comp["astar"]["nodes_explored"], delta=f"-{comp['nodes_saved_by_astar']} nodes" if comp['nodes_saved_by_astar'] > 0 else "Equal")
-            b3.metric("A* Runtime", f"{comp['astar'].get('execution_time_ms', 0)} ms")
+                b1, b2, b3 = st.columns(3)
+                b1.metric("Dijkstra Nodes Explored", comp["dijkstra"]["nodes_explored"])
+                b2.metric("A* Nodes Explored", comp["astar"]["nodes_explored"], delta=f"-{comp['nodes_saved_by_astar']} nodes" if comp['nodes_saved_by_astar'] > 0 else "Equal")
+                b3.metric("A* Runtime", f"{comp['astar'].get('execution_time_ms', 0)} ms")
 
-            bench_df = pd.DataFrame([
-                {
-                    "Algorithm": "Dijkstra's Algorithm",
-                    "Total Distance (m)": comp["dijkstra"]["total_distance"],
-                    "Nodes Visited": comp["dijkstra"]["nodes_explored"],
-                    "Execution Time (ms)": comp["dijkstra"].get("execution_time_ms", 0),
-                    "Heuristic Used": "None (Blind Search)",
-                    "Optimal?": "Guaranteed"
-                },
-                {
-                    "Algorithm": "A* (A-Star) Algorithm",
-                    "Total Distance (m)": comp["astar"]["total_distance"],
-                    "Nodes Visited": comp["astar"]["nodes_explored"],
-                    "Execution Time (ms)": comp["astar"].get("execution_time_ms", 0),
-                    "Heuristic Used": "Euclidean Distance",
-                    "Optimal?": "Guaranteed (Admissible h)"
-                }
-            ])
-            st.dataframe(bench_df, use_container_width=True, hide_index=True)
-
-            if comp["optimal_match"]:
-                st.success("✅ **Mathematical Optimality Verified**: Both Dijkstra and A* found the identical shortest distance!")
+                bench_df = pd.DataFrame([
+                    {
+                        "Algorithm": "Dijkstra's Algorithm",
+                        "Total Distance (m)": comp["dijkstra"]["total_distance"],
+                        "Nodes Visited": comp["dijkstra"]["nodes_explored"],
+                        "Execution Time (ms)": comp["dijkstra"].get("execution_time_ms", 0),
+                        "Heuristic Used": "None (Blind Search)",
+                        "Optimal?": "Guaranteed"
+                    },
+                    {
+                        "Algorithm": "A* (A-Star) Algorithm",
+                        "Total Distance (m)": comp["astar"]["total_distance"],
+                        "Nodes Visited": comp["astar"]["nodes_explored"],
+                        "Execution Time (ms)": comp["astar"].get("execution_time_ms", 0),
+                        "Heuristic Used": "Euclidean Distance",
+                        "Optimal?": "Guaranteed (Admissible h)"
+                    }
+                ])
+                st.dataframe(bench_df, use_container_width=True, hide_index=True)
 
             # Itinerary and CSV Download
             with st.expander("📋 Turn-by-Turn Route Itinerary", expanded=True):
@@ -276,48 +339,46 @@ def main():
                         desc = f"Start at {b_info['name']} ({b_info['category']})"
                     elif idx == len(route_result["path"]) - 1:
                         prev_bid = route_result["path"][idx - 1]
-                        edge_w = active_graph[prev_bid][bid]["weight"]
+                        edge_w = active_base_graph[prev_bid][bid]["weight"] if active_base_graph.has_edge(prev_bid, bid) else "detour"
                         desc = f"Arrive at {b_info['name']} (+{edge_w}m walk)"
                     else:
                         prev_bid = route_result["path"][idx - 1]
-                        edge_w = active_graph[prev_bid][bid]["weight"]
+                        edge_w = active_base_graph[prev_bid][bid]["weight"] if active_base_graph.has_edge(prev_bid, bid) else "detour"
                         desc = f"Walk to {b_info['name']} (+{edge_w}m)"
                     steps.append({"Step": idx + 1, "Building ID": bid, "Directions": desc})
                 
                 steps_df = pd.DataFrame(steps)
                 st.table(steps_df)
 
-                # CSV Download Button for Route Itinerary
                 route_csv = steps_df.to_csv(index=False).encode("utf-8")
                 st.download_button(
                     label="📥 Download Route Itinerary (CSV)",
                     data=route_csv,
                     file_name=f"route_{start_id}_to_{goal_id}.csv",
-                    mime="text/csv",
-                    help="Export the step-by-step route directions as a CSV file."
+                    mime="text/csv"
                 )
 
     # -------------------------------------------------------------
-    # TAB 2: CLASSROOM SCHEDULING (OR-TOOLS CP-SAT)
+    # TAB 2: CLASSROOM SCHEDULING & MINIMAL TIMETABLE REPAIR
     # -------------------------------------------------------------
     with tab_sched:
-        st.subheader("📅 Automated Classroom Timetabling (CP-SAT Constraint Solver)")
+        st.subheader("📅 Automated Classroom Timetabling & Emergency Schedule Repair")
         st.markdown(
             "Solves university course scheduling as a **Constraint Satisfaction Problem (CSP)**. "
-            "Guarantees **zero room double-booking**, **zero instructor clashes**, and room capacity compliance."
+            "Guarantees **zero room double-booking**, **zero instructor clashes**, and supports **minimal-perturbation recovery**."
         )
 
         c1, c2 = st.columns([1, 2])
         with c1:
-            st.markdown("### ⚙️ Solver Configuration")
+            st.markdown("### ⚙️ Timetable Controls")
             optimize_cap = st.checkbox(
                 "Optimize Seat Fit (Minimize Wasted Seats)",
                 value=True,
                 help="Soft constraint: minimizes room capacity minus student enrollment."
             )
-            solve_btn = st.button("⚡ Generate Conflict-Free Schedule", type="primary", use_container_width=True)
+            solve_btn = st.button("⚡ Generate Baseline Schedule", type="primary", use_container_width=True)
 
-        with st.spinner("Solving propositional constraints with Google OR-Tools CP-SAT..."):
+        with st.spinner("Solving constraints with Google OR-Tools CP-SAT..."):
             try:
                 schedule_result = solver_instance.solve(optimize_capacity=optimize_cap)
             except Exception as e:
@@ -330,7 +391,7 @@ def main():
 
         if schedule_result.get("status") in ("OPTIMAL", "FEASIBLE"):
             st.success(
-                f"✅ **Schedule Found ({schedule_result['status']})** in "
+                f"✅ **Baseline Schedule Active ({schedule_result['status']})** in "
                 f"**{schedule_result['solve_time_sec']} seconds**!"
             )
 
@@ -340,7 +401,7 @@ def main():
             k3.metric("🎯 Average Utilization", f"{schedule_result['average_utilization']}%")
             k4.metric("⏱️ Solver Run Time", f"{schedule_result['solve_time_sec']}s")
 
-            st.markdown("### 📋 Weekly Generated Timetable")
+            st.markdown("### 📋 Weekly Timetable")
             display_df = schedule_result["schedule_df"][[
                 "day", "period", "time", "course_name", "instructor", "room_name", "enrolled", "capacity", "utilization_pct"
             ]].copy()
@@ -349,21 +410,110 @@ def main():
             ]
             st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-            # CSV Download Button for Timetable
             sched_csv = display_df.to_csv(index=False).encode("utf-8")
             st.download_button(
                 label="📥 Download Weekly Timetable (CSV)",
                 data=sched_csv,
                 file_name="campus_weekly_schedule.csv",
-                mime="text/csv",
-                help="Export the generated timetable as a CSV spreadsheet."
+                mime="text/csv"
             )
 
-            with st.expander("🔍 Mathematical Verification of Hard Constraints"):
-                st.write("1. **Room Conflict Check**: Checked all (room, slot) combinations $\\implies$ **No overlapping classes**.")
-                st.write("2. **Teacher Clash Check**: Checked all (instructor, slot) pairs $\\implies$ **No simultaneous assignments**.")
-                st.write("3. **Capacity Check**: Every assigned room has $\\text{Capacity} \\ge \\text{Enrolled Students}$.")
-                st.write("4. **Lab Verification**: Lab-required courses placed strictly into laboratory facilities.")
+            # ---------------------------------------------------------
+            # DYNAMIC CAMPUS FEATURE: EMERGENCY ROOM CLOSURE & REPAIR
+            # ---------------------------------------------------------
+            st.markdown("---")
+            st.markdown("### ⚠️ Emergency Disruption Simulation & Minimal Timetable Repair")
+            st.info(
+                "When a classroom experiences water leakage, electrical outage, or emergency maintenance, "
+                "the system detects affected courses, ranks compatible vacant rooms by walking proximity, "
+                "and computes a **minimal-perturbation timetable repair** moving the fewest possible classes."
+            )
+
+            room_options = {
+                f"{r['name']} ({r['room_id']}, Cap: {r['capacity']})": r["room_id"]
+                for r in solver_instance.rooms.values()
+            }
+            selected_room_label = st.selectbox("Select Room Experiencing Emergency Closure:", options=list(room_options.keys()))
+            disabled_room_id = room_options[selected_room_label]
+
+            # Detect affected courses
+            disruption_info = solver_instance.simulate_room_unavailability(
+                unavailable_room_id=disabled_room_id,
+                current_schedule=schedule_result["schedule"]
+            )
+
+            if disruption_info["affected_count"] > 0:
+                st.error(
+                    f"🚨 **Disruption Detected**: Room **{disruption_info['room_name']} ({disabled_room_id})** has "
+                    f"**{disruption_info['affected_count']} scheduled class(es)** that must be relocated immediately!"
+                )
+
+                # Show recommendations for each affected course
+                for aff in disruption_info["affected_courses"]:
+                    st.markdown(f"**Relocation Options for: `{aff['course_name']}` ({aff['day']} {aff['time']})**")
+                    recs = solver_instance.recommend_alternative_rooms(
+                        course_id=aff["course_id"],
+                        slot_id=aff["slot_id"],
+                        current_schedule=schedule_result["schedule"],
+                        campus_graph=campus_graph.graph
+                    )
+                    if recs:
+                        rec_df = pd.DataFrame([
+                            {
+                                "Candidate Room": r["room_name"],
+                                "Building": r["building_id"],
+                                "Capacity": r["capacity"],
+                                "Enrolled": r["enrolled"],
+                                "Wasted Seats": r["wasted_seats"],
+                                "Walking Dist from Orig (m)": f"{r['walk_distance_from_orig_m']}m"
+                            }
+                            for r in recs
+                        ])
+                        st.table(rec_df)
+                    else:
+                        st.warning("No vacant room with sufficient capacity during this time slot. Time relocation required.")
+
+                # Button to perform minimal timetable repair
+                if st.button("🔧 Perform Minimal Timetable Repair", type="primary"):
+                    with st.spinner("Computing minimal perturbation repair with CP-SAT..."):
+                        repair_res = solver_instance.repair_timetable_minimal_change(
+                            unavailable_room_id=disabled_room_id,
+                            current_schedule=schedule_result["schedule"]
+                        )
+
+                    if repair_res["status"] in ("OPTIMAL", "FEASIBLE"):
+                        st.success(
+                            f"🎉 **Schedule Successfully Repaired!** "
+                            f"**{repair_res['schedule_stability_pct']}% stability preserved** "
+                            f"({repair_res['unchanged_courses_count']} courses unchanged, {repair_res['changed_courses_count']} relocated)."
+                        )
+
+                        if repair_res["changed_assignments"]:
+                            st.markdown("#### 🔄 Relocated Classes Detail")
+                            change_df = pd.DataFrame(repair_res["changed_assignments"])
+                            change_df.columns = ["Course ID", "Course Name", "Faculty", "Old Room", "New Room", "Old Time", "New Time", "Day"]
+                            st.dataframe(change_df, use_container_width=True, hide_index=True)
+
+                        with st.expander("📋 View Complete Repaired Timetable", expanded=True):
+                            repaired_display = repair_res["repaired_schedule_df"][[
+                                "day", "period", "time", "course_name", "instructor", "room_name", "enrolled", "capacity", "is_relocated"
+                            ]].copy()
+                            repaired_display.columns = [
+                                "Day", "Period", "Time Slot", "Course", "Instructor", "Room", "Enrolled", "Capacity", "Relocated?"
+                            ]
+                            st.dataframe(repaired_display, use_container_width=True, hide_index=True)
+
+                            rep_csv = repaired_display.to_csv(index=False).encode("utf-8")
+                            st.download_button(
+                                label="📥 Download Repaired Schedule (CSV)",
+                                data=rep_csv,
+                                file_name="campus_repaired_schedule.csv",
+                                mime="text/csv"
+                            )
+                    else:
+                        st.error(f"❌ Timetable repair failed: {repair_res.get('error')}")
+            else:
+                st.success(f"✅ Room **{disruption_info['room_name']}** has no assigned courses in the current schedule. No relocation needed!")
         else:
             st.error(f"❌ Timetable solver failed: {schedule_result.get('error', 'Infeasible constraints')}")
 
@@ -404,15 +554,13 @@ def main():
         st.markdown("### 📋 Classroom Allocation Detail & Health Status")
         st.dataframe(util_df, use_container_width=True, hide_index=True)
 
-        # CSV Download for Resource Allocation
         if not util_df.empty:
             util_csv = util_df.to_csv(index=False).encode("utf-8")
             st.download_button(
                 label="📥 Download Utilization Report (CSV)",
                 data=util_csv,
                 file_name="room_utilization_report.csv",
-                mime="text/csv",
-                help="Export the space utilization report as a CSV spreadsheet."
+                mime="text/csv"
             )
 
         idle_info = resource_mgr.get_idle_rooms_analysis()
@@ -435,11 +583,13 @@ def main():
         st.subheader("📖 Discrete Mathematics Foundations & Project Defense")
         st.markdown(
             """
-            ### 1. Graph Model Definition
+            ### 1. Graph Model Definition & Edge Deletion Subgraphs
             The campus is represented as a weighted undirected graph $G = (V, E, w)$:
             - **Vertices ($V$)**: Distinct campus buildings and facilities with spatial coordinates $(x, y)$.
             - **Edges ($E$)**: Walkways connecting adjacent buildings: $E = \\{ (u, v) : u, v \\in V \\}$.
             - **Weights ($w$)**: Non-negative scalar representing physical distance: $w: E \\to \\mathbb{R}^+$.
+            - **Dynamic Detour Subgraph**: When walkways are obstructed (e.g. weather, construction), an edge-deletion subgraph is formed:
+              $$G_{\\text{detour}} = (V, E \\setminus E_{\\text{blocked}})$$
 
             ---
 
@@ -454,7 +604,7 @@ def main():
 
             ---
 
-            ### 3. Constraint Satisfaction Problem (CSP) Formulation
+            ### 3. Constraint Satisfaction Problem (CSP) & Minimal Perturbation
             The timetabling problem is represented as a tuple $(X, D, C)$:
             - **Decision Variables**: $X_{c, r, s} \\in \\{0, 1\\}$
               True if course $c$ is scheduled in room $r$ at time slot $s$.
@@ -464,8 +614,9 @@ def main():
               3. **Instructor Clash**: $\\forall i, s: \\sum_{c \\in C_i} \\sum_r X_{c, r, s} \\le 1$
               4. **Capacity Constraint**: $X_{c, r, s} = 0$ if $\\text{Capacity}(r) < \\text{Enrolled}(c)$
               5. **Lab Requirement**: $X_{c, r, s} = 0$ if $\\text{RequiresLab}(c) \\land \\neg \\text{IsLab}(r)$
-            - **Soft Objective**:
-              $$\\min \\sum_{c, r, s} X_{c, r, s} \\times (\\text{Capacity}(r) - \\text{Enrolled}(c))$$
+            - **Minimal Perturbation Problem (Emergency Schedule Repair)**:
+              When room $r_{\\text{out}}$ becomes unavailable, find a new valid assignment $X'$ that maximizes agreement with initial assignment $X^*$:
+              $$\\max \\sum_{(c, r, s) \\in \\text{Initial}} X_{c, r, s}' \\quad \\text{subject to} \\quad X_{c, r_{\\text{out}}, s}' = 0$$
             """
         )
 

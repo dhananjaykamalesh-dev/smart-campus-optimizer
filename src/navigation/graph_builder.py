@@ -12,7 +12,7 @@ Discrete Mathematics Concept:
 
 import os
 import csv
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple, Set
 import networkx as nx
 
 
@@ -62,7 +62,6 @@ class CampusGraph:
         self.buildings_metadata.clear()
 
         # Step 1: Load Vertices (Buildings)
-        # In Discrete Math, Vertices represent entities or physical locations.
         with open(self.buildings_file, mode="r", encoding="utf-8") as bf:
             reader = csv.DictReader(bf)
             for row in reader:
@@ -80,13 +79,10 @@ class CampusGraph:
                     "category": category
                 }
 
-                # Add vertex to graph with coordinates and metadata
                 self.graph.add_node(node_id, **node_attributes)
                 self.buildings_metadata[node_id] = node_attributes
 
         # Step 2: Load Edges (Walkways/Paths)
-        # In Discrete Math, Edges represent connections between pairs of vertices.
-        # Here, walking paths are bidirectional (undirected) with positive weights (distances).
         with open(self.paths_file, mode="r", encoding="utf-8") as pf:
             reader = csv.DictReader(pf)
             for row in reader:
@@ -96,7 +92,6 @@ class CampusGraph:
                 is_accessible = row["is_accessible"].strip().lower() in ("true", "1", "yes")
                 is_covered = row["is_covered"].strip().lower() in ("true", "1", "yes")
 
-                # Verify that both endpoints exist in our vertices set
                 if source in self.graph and target in self.graph:
                     self.graph.add_edge(
                         source,
@@ -122,16 +117,53 @@ class CampusGraph:
         """
         accessible_graph = nx.Graph()
 
-        # Preserve all vertices and their position attributes
         for node, data in self.graph.nodes(data=True):
             accessible_graph.add_node(node, **data)
 
-        # Include only edges marked as accessible
         for u, v, data in self.graph.edges(data=True):
             if data.get("is_accessible", False):
                 accessible_graph.add_edge(u, v, **data)
 
         return accessible_graph
+
+    def get_blocked_subgraph(
+        self,
+        blocked_edges: List[Tuple[str, str]],
+        accessible_only: bool = False
+    ) -> nx.Graph:
+        r"""
+        Generates a dynamic subgraph representing campus walkways during temporary closures.
+
+        Discrete Math Concept:
+            Edge Deletion Subgraph: G_detour = (V, E \ E_blocked)
+            Removing a set of edges temporarily simulates construction, weather, or congestion.
+
+        Args:
+            blocked_edges: List of edge tuples (u, v) that are temporarily impassable.
+            accessible_only: If True, also filters out non-accessible edges.
+
+        Returns:
+            nx.Graph: Dynamic subgraph with blocked edges removed.
+        """
+        base_graph = self.get_accessible_subgraph() if accessible_only else self.graph
+        detour_graph = nx.Graph()
+
+        # Preserve all vertices
+        for node, data in base_graph.nodes(data=True):
+            detour_graph.add_node(node, **data)
+
+        # Normalize blocked edges for undirected matching: (u, v) and (v, u)
+        blocked_set: Set[Tuple[str, str]] = set()
+        for u, v in blocked_edges:
+            blocked_set.add((u, v))
+            blocked_set.add((v, u))
+
+        # Copy over only unblocked edges
+        for u, v, data in base_graph.edges(data=True):
+            if (u, v) not in blocked_set:
+                detour_graph.add_edge(u, v, **data)
+
+        return detour_graph
 
     def get_building_info(self, building_id: str) -> Optional[Dict[str, Any]]:
         """
