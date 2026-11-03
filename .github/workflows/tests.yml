@@ -1,0 +1,73 @@
+# ============================================================
+# GitHub Actions CI Workflow — Smart Campus Optimizer
+# ============================================================
+# This file tells GitHub to automatically run our test suite
+# every time someone pushes code or opens a pull request.
+#
+# Why is this useful?
+#   - Catches bugs before they reach the main branch
+#   - Shows teammates that tests are always passing
+#   - The green check mark on GitHub = project is healthy
+# ============================================================
+
+name: Run Tests  # Name shown on the GitHub Actions dashboard
+
+# TRIGGER: When does this workflow run?
+on:
+  push:
+    branches: [ main ]          # Every push to the main branch
+  pull_request:
+    branches: [ main ]          # Every pull request targeting main
+
+# JOBS: What does the workflow actually do?
+jobs:
+  test:
+    name: Pytest on Python 3.12            # Label shown in the Actions UI
+    runs-on: ubuntu-latest                 # Use GitHub's free Linux runner
+
+    steps:
+      # -------------------------------------------------------
+      # STEP 1: Download the repository code into the runner
+      # -------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -------------------------------------------------------
+      # STEP 2: Install Python 3.12
+      # -------------------------------------------------------
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"          # Cache pip downloads to speed up future runs
+
+      # -------------------------------------------------------
+      # STEP 3: Install all project dependencies
+      # (reads from requirements.txt, includes pytest-cov)
+      # -------------------------------------------------------
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # -------------------------------------------------------
+      # STEP 4: Run the full test suite with coverage reporting
+      #
+      # Flags explained:
+      #   -v              = verbose output (shows each test name)
+      #   --cov=src       = measure coverage of everything in src/
+      #   --cov-report=term-missing = show which lines are NOT tested
+      # -------------------------------------------------------
+      - name: Run pytest with coverage
+        run: python -m pytest tests/ -v --cov=src --cov-report=term-missing
+
+      # -------------------------------------------------------
+      # STEP 5: Upload coverage report as a downloadable artifact
+      # (optional but nice — teammates can download it from GitHub)
+      # -------------------------------------------------------
+      - name: Upload coverage report
+        if: always()            # Run even if tests fail — for debugging
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: .coverage
+          retention-days: 7     # Keep for 7 days, then auto-delete
+

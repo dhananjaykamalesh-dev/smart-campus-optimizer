@@ -100,3 +100,47 @@ This guide contains the most critical viva and presentation questions for this p
 ### Q12: How are results exported and integrated into real campus operations?
 **Answer:**
 > "All generated route itineraries, conflict-free weekly timetables, and room utilization reports can be exported directly via **1-click CSV download buttons**, allowing academic registrars and students to import them straight into Microsoft Excel, ERP systems, or student portals."
+
+
+---
+
+### Q13: How does your Continuous Integration (CI) pipeline work?
+**Answer:**
+> "We use **GitHub Actions** — a free automation service built into GitHub. We wrote a configuration file at `.github/workflows/tests.yml` that tells GitHub:
+> 1. **When to run**: Every time anyone pushes code to the `main` branch, or opens a pull request.
+> 2. **What to do**: Spin up a fresh Ubuntu virtual machine, install Python 3.12, install all our dependencies from `requirements.txt`, and run `pytest tests/ -v --cov=src`.
+> 3. **What it ensures**: If any of our 27 tests fail after a code change, the push is flagged with a red ❌ on GitHub, so we catch bugs immediately before they reach others.
+>
+> The result is a green ✅ badge in our README — proof the project is always in a working state."
+
+---
+
+### Q14: What is test coverage and why does it matter?
+**Answer:**
+> "**Test coverage** is a percentage that answers: 'Of all the lines of code in our project, how many lines are actually executed by our test suite?'
+>
+> We measure it with `pytest-cov`. For example, if a function has 10 lines and our tests only exercise 8 of them, that function has 80% coverage — the other 2 lines are 'untested' and might contain hidden bugs.
+>
+> We run:
+> ```bash
+> python -m pytest tests/ --cov=src --cov-report=term-missing
+> ```
+> The `--cov-report=term-missing` flag shows exactly which line numbers are not yet tested, so we know where to add more tests.
+>
+> High coverage doesn't guarantee zero bugs, but low coverage is a warning sign that large parts of the system are never tested at all."
+
+---
+
+### Q15: What are smoke tests and how are they different from unit tests?
+**Answer:**
+> "A **unit test** tests a single, isolated function. For example, `test_dijkstra_shortest_path` calls only the Dijkstra function with specific inputs and checks the output.
+>
+> A **smoke test** tests the entire application from end to end — just enough to confirm it starts without crashing. The name comes from hardware engineering: 'turn it on and check if it smokes.'
+>
+> We use **Streamlit AppTest** (`from streamlit.testing.v1 import AppTest`) which runs `app.py` headlessly (no browser needed) and lets us assert that:
+> - The app renders without exceptions
+> - The correct 4 tabs appear
+> - Sidebar metrics are populated
+> - No 'file not found' errors appear
+>
+> If a bad import is added to `app.py`, or a CSV file is accidentally deleted, the smoke tests catch it in seconds — even on GitHub Actions, without any human running the app."
