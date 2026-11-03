@@ -4,20 +4,22 @@
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.30%2B-red.svg)](https://streamlit.io/)
 [![NetworkX](https://img.shields.io/badge/NetworkX-3.0%2B-orange.svg)](https://networkx.org/)
 [![OR--Tools](https://img.shields.io/badge/OR--Tools-CP--SAT-green.svg)](https://developers.google.com/optimization)
-[![Tests](https://img.shields.io/badge/Pytest-14%2F14%20Passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Pytest-17%2F17%20Passing-brightgreen.svg)](tests/)
 
 A complete academic project applying **Discrete Mathematics** (Graph Theory, Heuristic Search, Constraint Satisfaction, and Resource Matching) to optimize campus operations.
 
 ---
 
-## 🎯 System Modules
+## 🎯 System Modules & Features
 
 ### 📍 Module 1: Campus Navigation (Graph Theory)
 - Models campus buildings and walkways as an undirected weighted graph $G = (V, E, w)$.
 - Computes optimal paths using **Dijkstra's Algorithm** and **A\* Search**.
 - Utilizes Euclidean distance as a mathematically proven **admissible heuristic** ($h(n) \le h^*(n)$).
-- **Accessibility Subgraph**: Edge-induced subgraph filtering out stairs for wheelchair-friendly navigation.
+- **Algorithm Benchmarking**: Live side-by-side performance metrics comparing Dijkstra vs. A* (distance, nodes explored, runtime in milliseconds).
+- **Accessibility Subgraph**: Edge-induced subgraph filtering out stairs for wheelchair-friendly navigation with active mode indicator.
 - **Plotly 2D Interactive Map**: Visualizes nodes, walkway connectivity, and highlighted routes.
+- **Data Export**: 1-click CSV download of turn-by-turn route itineraries.
 
 ### 📅 Module 2: Classroom Scheduling (Constraint Satisfaction Problem)
 - Formulates course timetabling as a Boolean CSP with variables $X_{c, r, s} \in \{0, 1\}$.
@@ -29,12 +31,17 @@ A complete academic project applying **Discrete Mathematics** (Graph Theory, Heu
   - Room capacity compliance ($\text{Capacity}(r) \ge \text{Enrolled}(c)$).
   - Specialized lab requirements ($\text{RequiresLab}(c) \implies \text{IsLab}(r)$).
 - Minimizes wasted seats as an optimization objective.
+- **Data Export**: 1-click CSV download of the conflict-free weekly schedule.
 
 ### 📊 Module 3: Space Allocation & Utilization Analytics
 - Computes classroom seat utilization: $\text{Utilization Rate} = \frac{\text{Enrolled Students}}{\text{Room Capacity}} \times 100\%$.
-- Classifies room allocations into **Under-utilized (<50%)**, **Optimal (50–90%)**, and **Near Peak (>90%)**.
-- Detects idle rooms that can be powered down to save energy and operational costs.
+- Classifies room allocations with clear threshold bands:
+  - **Under-utilized (<50%)** (Amber)
+  - **Optimal (50–90%)** (Teal)
+  - **Near Peak (>90%)** (Coral/Red)
+- Detects idle rooms that can be powered down to save campus energy.
 - Generates interactive Plotly bar and grouped charts.
+- **Data Export**: 1-click CSV download of space utilization analytics.
 
 ---
 
@@ -56,7 +63,7 @@ smart-campus-optimizer/
 │   ├── navigation/
 │   │   ├── __init__.py
 │   │   ├── graph_builder.py   # Loads CSVs and constructs NetworkX Graph G = (V, E)
-│   │   └── pathfinder.py      # Dijkstra and A* pathfinding algorithms with metrics
+│   │   └── pathfinder.py      # Dijkstra, A*, and comparison benchmarking with timing
 │   │
 │   ├── scheduling/
 │   │   ├── __init__.py
@@ -74,16 +81,20 @@ smart-campus-optimizer/
 │   ├── __init__.py
 │   ├── test_navigation.py     # Dijkstra vs A* correctness, unreachable nodes, ramp filters
 │   ├── test_scheduling.py     # Hard constraint validation (zero room/teacher overlaps)
-│   └── test_allocation.py     # Space utilization bounds and idle room checks
+│   ├── test_allocation.py     # Space utilization bounds and idle room checks
+│   └── test_ui_utilities.py   # Benchmark tests, graph summary metrics, and CSV exports
 │
 ├── docs/
 │   ├── architecture.md        # Modular architecture, components, and design decisions
 │   ├── algorithms.md          # Discrete mathematics theory (Dijkstra, A*, heuristics, CP-SAT)
-│   └── viva_answers.md        # Viva interview guide with 11 questions & simple answers
+│   ├── viva_answers.md        # Viva interview guide with 11 questions & simple answers
+│   └── team_collaboration_guide.md # 1-click setup guide for team members
 │
-├── app.py                     # Streamlit multi-tab user interface
+├── app.py                     # Streamlit multi-tab user interface with benchmarks and CSV downloads
 ├── conftest.py                # Pytest search path configuration
 ├── requirements.txt           # Python dependencies
+├── run.bat                    # 1-click Windows launcher
+├── run.sh                     # 1-click Mac/Linux launcher
 └── README.md                  # Project overview & manual
 ```
 
@@ -103,13 +114,13 @@ pip install -r requirements.txt
 ```bash
 streamlit run app.py
 ```
-Open your browser at `http://localhost:8501`.
+Or simply double-click `run.bat` (Windows).
 
 ### 4. Run Automated Unit Tests
 ```bash
 pytest tests/ -v
 ```
-All 14 tests will run and pass in ~1.5 seconds.
+All 17 tests will run and pass in ~2 seconds.
 
 ---
 
@@ -118,3 +129,4 @@ All 14 tests will run and pass in ~1.5 seconds.
 - **Mathematical Foundations & Proofs**: [`docs/algorithms.md`](docs/algorithms.md)
 - **Architecture & System Design**: [`docs/architecture.md`](docs/architecture.md)
 - **Top Viva / Presentation Questions**: [`docs/viva_answers.md`](docs/viva_answers.md)
+- **Team Collaboration Guide**: [`docs/team_collaboration_guide.md`](docs/team_collaboration_guide.md)

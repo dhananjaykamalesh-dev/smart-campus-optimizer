@@ -17,3 +17,4 @@ pip3 install -r requirements.txt --quiet
 echo "[2/2] Starting Streamlit..."
 echo "Opening in browser at http://localhost:8501"
 streamlit run app.py
+

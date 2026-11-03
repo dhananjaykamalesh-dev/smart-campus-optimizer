@@ -27,6 +27,7 @@ Discrete Mathematics Relevance:
 
 import math
 import heapq
+import time
 from typing import List, Dict, Tuple, Optional, Any
 import networkx as nx
 
@@ -77,14 +78,6 @@ class CampusPathfinder:
         """
         Computes the shortest path using Dijkstra's Algorithm.
 
-        Algorithm Walkthrough:
-        1. Initialize distances to all nodes as infinity, except start_node = 0.
-        2. Push (0, start_node) to a min-priority queue (heap).
-        3. Pop the node with the smallest distance.
-        4. If it's the goal, reconstruct the path and return.
-        5. Otherwise, relax all neighbor edges: if new_distance < current_distance,
-           update distance and push to heap.
-
         Args:
             start_node: Origin building ID.
             goal_node: Target building ID.
@@ -96,8 +89,11 @@ class CampusPathfinder:
             - 'total_distance': Total walking distance in meters.
             - 'walking_time_min': Estimated walking time in minutes.
             - 'nodes_explored': Total number of nodes expanded (visited).
+            - 'execution_time_ms': Runtime in milliseconds.
             - 'algorithm': 'Dijkstra'
         """
+        start_clock = time.perf_counter()
+
         if start_node not in self.graph:
             raise ValueError(f"Start building '{start_node}' does not exist in graph.")
         if goal_node not in self.graph:
@@ -106,42 +102,35 @@ class CampusPathfinder:
         # Special case: start is already goal
         if start_node == goal_node:
             name = self.graph.nodes[start_node].get("name", start_node)
+            elapsed_ms = round((time.perf_counter() - start_clock) * 1000, 3)
             return {
                 "path": [start_node],
                 "path_names": [name],
                 "total_distance": 0.0,
                 "walking_time_min": 0.0,
                 "nodes_explored": 1,
+                "execution_time_ms": elapsed_ms,
                 "algorithm": "Dijkstra"
             }
 
-        # Priority queue stores tuples of: (cumulative_distance, current_node)
         priority_queue: List[Tuple[float, str]] = []
         heapq.heappush(priority_queue, (0.0, start_node))
 
-        # Track the shortest discovered distance to each node: g(n)
         distances: Dict[str, float] = {start_node: 0.0}
-
-        # Track previous node to reconstruct the final path: predecessor mapping
         predecessors: Dict[str, Optional[str]] = {start_node: None}
-
-        # Track set of visited/expanded nodes to measure search efficiency
         visited_nodes = set()
 
         while priority_queue:
             current_dist, current_node = heapq.heappop(priority_queue)
 
-            # If node already settled with a smaller distance, skip it
             if current_node in visited_nodes:
                 continue
 
             visited_nodes.add(current_node)
 
-            # Goal reached! Early exit optimization
             if current_node == goal_node:
                 break
 
-            # Explore neighbors
             for neighbor in self.graph.neighbors(current_node):
                 if neighbor in visited_nodes:
                     continue
@@ -150,13 +139,13 @@ class CampusPathfinder:
                 edge_weight = edge_data.get("weight", 1.0)
                 tentative_dist = current_dist + edge_weight
 
-                # Relaxation step: found a shorter path to neighbor?
                 if tentative_dist < distances.get(neighbor, float("inf")):
                     distances[neighbor] = tentative_dist
                     predecessors[neighbor] = current_node
                     heapq.heappush(priority_queue, (tentative_dist, neighbor))
 
-        # Check if goal was reachable
+        elapsed_ms = round((time.perf_counter() - start_clock) * 1000, 3)
+
         if goal_node not in distances:
             return {
                 "path": [],
@@ -164,11 +153,11 @@ class CampusPathfinder:
                 "total_distance": float("inf"),
                 "walking_time_min": 0.0,
                 "nodes_explored": len(visited_nodes),
+                "execution_time_ms": elapsed_ms,
                 "algorithm": "Dijkstra",
                 "error": "No connected path exists between the selected buildings."
             }
 
-        # Reconstruct path by backtracking from goal to start
         path = []
         curr: Optional[str] = goal_node
         while curr is not None:
@@ -178,7 +167,6 @@ class CampusPathfinder:
 
         path_names = [self.graph.nodes[n].get("name", n) for n in path]
         total_dist = round(distances[goal_node], 2)
-        # Average pedestrian walking speed is approximately 1.4 meters/second (~84 m/min)
         walking_time = round(total_dist / 84.0, 1)
 
         return {
@@ -187,6 +175,7 @@ class CampusPathfinder:
             "total_distance": total_dist,
             "walking_time_min": walking_time,
             "nodes_explored": len(visited_nodes),
+            "execution_time_ms": elapsed_ms,
             "algorithm": "Dijkstra"
         }
 
@@ -196,12 +185,6 @@ class CampusPathfinder:
         """
         Computes the shortest path using the A* (A-Star) Algorithm.
 
-        Algorithm Walkthrough:
-        1. Uses priority queue with priority key: f(n) = g(n) + h(n).
-        2. g(n) is the exact cost from start to node n.
-        3. h(n) is the Euclidean distance from node n to goal.
-        4. Nodes closer to the goal direction are prioritized first.
-
         Args:
             start_node: Origin building ID.
             goal_node: Target building ID.
@@ -209,6 +192,8 @@ class CampusPathfinder:
         Returns:
             Dictionary with path results and search metrics.
         """
+        start_clock = time.perf_counter()
+
         if start_node not in self.graph:
             raise ValueError(f"Start building '{start_node}' does not exist in graph.")
         if goal_node not in self.graph:
@@ -216,27 +201,23 @@ class CampusPathfinder:
 
         if start_node == goal_node:
             name = self.graph.nodes[start_node].get("name", start_node)
+            elapsed_ms = round((time.perf_counter() - start_clock) * 1000, 3)
             return {
                 "path": [start_node],
                 "path_names": [name],
                 "total_distance": 0.0,
                 "walking_time_min": 0.0,
                 "nodes_explored": 1,
+                "execution_time_ms": elapsed_ms,
                 "algorithm": "A*"
             }
 
-        # Priority queue stores tuples of: (f_score, current_node)
         priority_queue: List[Tuple[float, str]] = []
-        
         initial_h = self.euclidean_heuristic(start_node, goal_node)
         heapq.heappush(priority_queue, (initial_h, start_node))
 
-        # g_score[node]: exact cost from start to node
         g_score: Dict[str, float] = {start_node: 0.0}
-
-        # Predecessor mapping to reconstruct optimal path
         predecessors: Dict[str, Optional[str]] = {start_node: None}
-
         visited_nodes = set()
 
         while priority_queue:
@@ -247,7 +228,6 @@ class CampusPathfinder:
 
             visited_nodes.add(current_node)
 
-            # Reached destination
             if current_node == goal_node:
                 break
 
@@ -265,10 +245,11 @@ class CampusPathfinder:
                     g_score[neighbor] = tentative_g
                     predecessors[neighbor] = current_node
                     
-                    # f(n) = g(n) + h(n)
                     h_val = self.euclidean_heuristic(neighbor, goal_node)
                     f_val = tentative_g + h_val
                     heapq.heappush(priority_queue, (f_val, neighbor))
+
+        elapsed_ms = round((time.perf_counter() - start_clock) * 1000, 3)
 
         if goal_node not in g_score:
             return {
@@ -277,11 +258,11 @@ class CampusPathfinder:
                 "total_distance": float("inf"),
                 "walking_time_min": 0.0,
                 "nodes_explored": len(visited_nodes),
+                "execution_time_ms": elapsed_ms,
                 "algorithm": "A*",
                 "error": "No connected path exists between the selected buildings."
             }
 
-        # Reconstruct path
         path = []
         curr: Optional[str] = goal_node
         while curr is not None:
@@ -299,6 +280,38 @@ class CampusPathfinder:
             "total_distance": total_dist,
             "walking_time_min": walking_time,
             "nodes_explored": len(visited_nodes),
+            "execution_time_ms": elapsed_ms,
             "algorithm": "A*"
         }
 
+    def compare_algorithms(self, start_node: str, goal_node: str) -> Dict[str, Any]:
+        """
+        Executes both Dijkstra and A* to benchmark search efficiency side-by-side.
+
+        Discrete Math Relevance:
+            Empirically verifies:
+            1. Shortest distance equivalence: d_Dijkstra(u, v) == d_A*(u, v)
+            2. Heuristic search efficiency: nodes_visited_A* <= nodes_visited_Dijkstra
+
+        Args:
+            start_node: Origin building ID.
+            goal_node: Target building ID.
+
+        Returns:
+            Dictionary comparing Dijkstra and A* metrics.
+        """
+        dijkstra_res = self.find_shortest_path_dijkstra(start_node, goal_node)
+        astar_res = self.find_shortest_path_astar(start_node, goal_node)
+
+        optimal_match = (
+            dijkstra_res.get("total_distance") == astar_res.get("total_distance")
+        )
+
+        return {
+            "start_node": start_node,
+            "goal_node": goal_node,
+            "dijkstra": dijkstra_res,
+            "astar": astar_res,
+            "optimal_match": optimal_match,
+            "nodes_saved_by_astar": dijkstra_res.get("nodes_explored", 0) - astar_res.get("nodes_explored", 0)
+        }

@@ -30,7 +30,15 @@ This guide contains the most critical viva and presentation questions for this p
 
 ---
 
-### Q4: What heuristic does your A* algorithm use, and is it admissible?
+### Q4: How does your UI empirically demonstrate that A* is more efficient than Dijkstra?
+**Answer:**
+> "In Module 1, we built a live **Algorithm Performance Benchmark**. When you query a route between two distant campus buildings, our system executes both algorithms simultaneously. The UI shows that:
+> 1. Both return the exact same distance (verifying mathematical optimality).
+> 2. A* examines up to 30–50% fewer nodes because the Euclidean heuristic guides the priority queue directly toward the destination coordinates."
+
+---
+
+### Q5: What heuristic does your A* algorithm use, and is it admissible?
 **Answer:**
 > "We use **Euclidean distance** (straight-line distance):
 > $$h(u, v) = \sqrt{(x_u - x_v)^2 + (y_u - y_v)^2}$$
@@ -38,27 +46,27 @@ This guide contains the most critical viva and presentation questions for this p
 
 ---
 
-### Q5: Can Dijkstra's algorithm work with negative edge weights?
+### Q6: Can Dijkstra's algorithm work with negative edge weights?
 **Answer:**
 > "No. Dijkstra assumes that adding an edge always increases path length (monotonicity). With negative edge weights, an already-visited vertex could later find a shorter path, breaking the greedy choice. For graphs with negative weights, the **Bellman-Ford algorithm** must be used. In our campus system, walking distances are physical measurements and therefore always positive."
 
 ---
 
-### Q6: How does the accessibility / wheelchair mode work?
+### Q7: How does the accessibility / wheelchair mode work?
 **Answer:**
 > "In Discrete Math, this is an **edge-induced subgraph** $G' = (V, E')$.
 > We filter the edge set $E$ to include only pathways marked with `is_accessible = True`. Edges containing staircases or steep slopes are removed. The pathfinder is then run on this subgraph, which automatically routes around the stairs via accessible ramps."
 
 ---
 
-### Q7: What data structures did you use for the pathfinding algorithms?
+### Q8: What data structures did you use for the pathfinding algorithms?
 **Answer:**
 > - A **Min-Heap (Priority Queue)** using Python's `heapq` module to extract the node with the lowest distance in $\mathcal{O}(\log V)$ time.
 > - A **Hash Map (Dictionary)** for distances $g(n)$ and predecessors (parent pointers) to reconstruct the final route in $\mathcal{O}(1)$ average lookup time."
 
 ---
 
-### Q8: How does Module 2 (Classroom Scheduling) connect to Discrete Mathematics?
+### Q9: How does Module 2 (Classroom Scheduling) connect to Discrete Mathematics?
 **Answer:**
 > "Timetabling is a classic **Constraint Satisfaction Problem (CSP)** rooted in Propositional Logic and Boolean Satisfiability.
 > We define binary decision variables $X_{c, r, s} \in \{0, 1\}$ representing whether course $c$ is scheduled in room $r$ at time slot $s$.
@@ -71,20 +79,24 @@ This guide contains the most critical viva and presentation questions for this p
 
 ---
 
-### Q9: Why use Google OR-Tools CP-SAT instead of writing a recursive backtracking algorithm?
+### Q10: Why use Google OR-Tools CP-SAT instead of writing a recursive backtracking algorithm?
 **Answer:**
 > "Simple recursive backtracking suffers from combinatorial explosion $\mathcal{O}(R \times S \times C)$ and often freezes or takes minutes. Google OR-Tools CP-SAT utilizes modern SAT-solving techniques, conflict-driven clause learning (CDCL), and domain propagation, finding an optimal conflict-free schedule in under 0.1 seconds."
 
 ---
 
-### Q10: How does Module 3 calculate Space Utilization?
+### Q11: How does Module 3 calculate Space Utilization and what do the color bands represent?
 **Answer:**
 > "Utilization is computed as:
 > $$\text{Utilization Rate} = \frac{\text{Enrolled Students}}{\text{Room Capacity}} \times 100\%$$
-> Since our CSP constraint guarantees $\text{Room Capacity} \ge \text{Enrolled Students}$, utilization is strictly between $0\%$ and $100\%$. The module also identifies idle rooms that can be powered down to save energy."
+> In the dashboard:
+> - **Amber (<50%)**: Under-utilized room (energy and HVAC waste).
+> - **Teal (50–90%)**: Optimal seating capacity.
+> - **Coral (>90%)**: Peak capacity / potential crowding.
+> We also detect unassigned idle rooms so facility managers can turn off lighting and cooling."
 
 ---
 
-### Q11: Why did you use Streamlit and Plotly instead of a paid service or React?
+### Q12: How are results exported and integrated into real campus operations?
 **Answer:**
-> "Streamlit allows us to build a responsive, reactive web application entirely in Python without complex frontend build chains. Plotly provides offline, GPU-accelerated 2D geometric visualization without needing paid external mapping APIs (like Google Maps API) or exposing API keys."
+> "All generated route itineraries, conflict-free weekly timetables, and room utilization reports can be exported directly via **1-click CSV download buttons**, allowing academic registrars and students to import them straight into Microsoft Excel, ERP systems, or student portals."

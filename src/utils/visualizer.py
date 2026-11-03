@@ -11,7 +11,6 @@ Discrete Mathematics Relevance:
 
 from typing import List, Optional, Dict, Any
 import plotly.graph_objects as go
-import plotly.express as px
 import pandas as pd
 import networkx as nx
 
@@ -67,14 +66,19 @@ def create_campus_map_figure(
         normal_edge_x.extend([pos_u[0], pos_v[0], None])
         normal_edge_y.extend([pos_u[1], pos_v[1], None])
 
+    walkway_label = "Accessible Paths (Ramps)" if accessible_only else "Standard Walkways"
     fig.add_trace(
         go.Scatter(
             x=normal_edge_x,
             y=normal_edge_y,
             mode="lines",
-            line=dict(color="#B0BEC5", width=2.5, dash="dot" if accessible_only else "solid"),
+            line=dict(
+                color="#0077B6" if accessible_only else "#B0BEC5",
+                width=3.0 if accessible_only else 2.5,
+                dash="solid"
+            ),
             hoverinfo="none",
-            name="Walkways",
+            name=walkway_label,
             showlegend=True
         )
     )
@@ -96,7 +100,7 @@ def create_campus_map_figure(
                 marker=dict(size=12, color="#FF6B35", symbol="circle"),
                 hoverinfo="text",
                 text=[f"Step {idx + 1}: {graph.nodes[n]['name']} ({n})" for idx, n in enumerate(highlight_path)],
-                name="Optimized Route",
+                name="Calculated Route",
                 showlegend=True
             )
         )
@@ -161,17 +165,19 @@ def create_campus_map_figure(
         )
     )
 
+    mode_title_suffix = " (♿ Wheelchair / Ramp Mode)" if accessible_only else " (Standard Walkway Mode)"
+
     fig.update_layout(
         title=dict(
-            text="Interactive Campus Graph Navigation Map",
+            text=f"Interactive Campus Graph Navigation Map{mode_title_suffix}",
             x=0.5,
             xanchor="center",
-            font=dict(size=18, color="#1D3557")
+            font=dict(size=17, color="#1D3557")
         ),
         paper_bgcolor="#F8F9FA",
         plot_bgcolor="#FFFFFF",
         hovermode="closest",
-        margin=dict(b=30, l=30, r=30, t=50),
+        margin=dict(b=30, l=30, r=30, t=55),
         xaxis=dict(
             title="Campus East-West Distance (Meters)",
             showgrid=True,
@@ -201,25 +207,30 @@ def create_campus_map_figure(
 
 def create_utilization_bar_chart(summary_df: pd.DataFrame) -> go.Figure:
     """
-    Renders a bar chart comparing classroom seat utilization across courses.
+    Renders a bar chart comparing classroom seat utilization across courses
+    with threshold guidelines.
 
     Args:
         summary_df: DataFrame containing 'Course', 'Utilization %', 'Enrolled', 'Capacity'.
 
     Returns:
-        go.Figure: Interactive Plotly bar chart.
+        go.Figure: Interactive Plotly bar chart with category coloring.
     """
     if summary_df.empty:
         return go.Figure()
 
     colors = []
+    category_labels = []
     for util in summary_df["Utilization %"]:
         if util < 50.0:
-            colors.append("#F4A261")  # Amber / Under-utilized
+            colors.append("#E76F51")  # Coral / Under-utilized
+            category_labels.append("Under-utilized (<50%)")
         elif util <= 90.0:
             colors.append("#2A9D8F")  # Teal / Optimal
+            category_labels.append("Optimal (50-90%)")
         else:
-            colors.append("#E76F51")  # Coral / Near Peak
+            colors.append("#E63946")  # Red / Near Peak Capacity
+            category_labels.append("Near Capacity (>90%)")
 
     fig = go.Figure(
         data=[
@@ -229,18 +240,36 @@ def create_utilization_bar_chart(summary_df: pd.DataFrame) -> go.Figure:
                 marker=dict(color=colors),
                 text=[f"{u}%" for u in summary_df["Utilization %"]],
                 textposition="auto",
+                customdata=category_labels,
                 hovertemplate=(
                     "<b>%{x}</b><br>"
                     "Utilization: %{y}%<br>"
+                    "Health: %{customdata}<br>"
                     "<extra></extra>"
                 )
             )
         ]
     )
 
+    # Reference threshold lines for academic evaluation
+    fig.add_hline(
+        y=50,
+        line_dash="dot",
+        line_color="#E76F51",
+        annotation_text="50% Under-utilized Threshold",
+        annotation_position="bottom right"
+    )
+    fig.add_hline(
+        y=90,
+        line_dash="dot",
+        line_color="#2A9D8F",
+        annotation_text="90% Peak Capacity Threshold",
+        annotation_position="top right"
+    )
+
     fig.update_layout(
         title=dict(text="Classroom Space Utilization by Course (%)", x=0.5),
-        yaxis=dict(title="Utilization Rate (%)", range=[0, 105]),
+        yaxis=dict(title="Utilization Rate (%)", range=[0, 110]),
         xaxis=dict(title="Scheduled Courses"),
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#F8F9FA",

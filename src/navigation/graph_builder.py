@@ -157,3 +157,26 @@ class CampusGraph:
             for bid, meta in self.buildings_metadata.items()
         ]
 
+    def get_graph_summary(self) -> Dict[str, Any]:
+        """
+        Computes key structural metrics of the campus graph.
+
+        Returns:
+            Dictionary with vertices count, edges count, accessible edges count,
+            covered walkways count, and connected components.
+        """
+        accessible_edges = sum(
+            1 for _, _, d in self.graph.edges(data=True) if d.get("is_accessible", False)
+        )
+        covered_edges = sum(
+            1 for _, _, d in self.graph.edges(data=True) if d.get("is_covered", False)
+        )
+        is_connected = nx.is_connected(self.graph) if len(self.graph) > 0 else False
+
+        return {
+            "num_buildings": self.graph.number_of_nodes(),
+            "num_paths": self.graph.number_of_edges(),
+            "num_accessible_paths": accessible_edges,
+            "num_covered_paths": covered_edges,
+            "is_connected": is_connected
+        }

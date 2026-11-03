@@ -3,7 +3,7 @@ Main Web Application: Smart Campus Optimization System
 Built with Streamlit, NetworkX, Google OR-Tools CP-SAT, and Plotly.
 
 Discrete Mathematics Core Modules:
-- Tab 1: Campus Navigation (Dijkstra vs. A* Graph Search)
+- Tab 1: Campus Navigation (Dijkstra vs. A* Graph Search & Benchmarking)
 - Tab 2: Timetable Scheduling (Propositional Constraints with OR-Tools CP-SAT)
 - Tab 3: Resource Allocation & Space Utilization Metrics
 - Tab 4: Mathematical Concepts & Viva Defense Guide
@@ -44,6 +44,20 @@ INSTRUCTORS_CSV = os.path.join(DATA_DIR, "instructors.csv")
 TIME_SLOTS_CSV = os.path.join(DATA_DIR, "time_slots.csv")
 
 
+def check_data_files() -> bool:
+    """Verifies that all required CSV data files exist."""
+    required = [
+        BUILDINGS_CSV, PATHS_CSV, ROOMS_CSV,
+        COURSES_CSV, INSTRUCTORS_CSV, TIME_SLOTS_CSV
+    ]
+    missing = [f for f in required if not os.path.exists(f)]
+    if missing:
+        for m in missing:
+            st.error(f"❌ Missing critical data file: {m}")
+        return False
+    return True
+
+
 @st.cache_resource
 def load_campus_graph() -> CampusGraph:
     """Loads and caches the campus graph from CSV data."""
@@ -62,32 +76,53 @@ def load_timetable_solver() -> CampusTimetableSolver:
 
 
 def main():
+    if not check_data_files():
+        st.stop()
+
     # Header Banner
     st.title("🏫 Graph-Based Smart Campus Optimization System")
     st.markdown(
         "**Discrete Mathematics Project** • Graph Theory ($G=(V, E)$), Heuristic Search ($A^*$), "
-        "and Constraint Satisfaction (CP-SAT)."
+        "and Propositional Constraint Satisfaction (OR-Tools CP-SAT)."
     )
 
     # Initialize Graph and Data
     campus_graph = load_campus_graph()
     solver_instance = load_timetable_solver()
+    graph_summary = campus_graph.get_graph_summary()
     buildings_list = campus_graph.get_all_buildings()
     building_options = {f"{b['name']} ({b['id']})": b["id"] for b in buildings_list}
 
-    # Sidebar Navigation / Controls
-    st.sidebar.header("🎓 System Metrics")
-    st.sidebar.info(
-        "**Campus Entities**\n"
-        f"- Buildings (Vertices): **{len(campus_graph.graph.nodes)}**\n"
-        f"- Walkways (Edges): **{len(campus_graph.graph.edges)}**\n"
-        f"- Classrooms: **{len(solver_instance.rooms)}**\n"
-        f"- Courses Registered: **{len(solver_instance.courses)}**\n"
-        f"- Faculty Members: **{len(solver_instance.instructors)}**\n"
-        f"- Weekly Slots: **{len(solver_instance.time_slots)}**"
-    )
+    # -------------------------------------------------------------
+    # SIDEBAR: CAMPUS SUMMARY METRICS & SYSTEM CONTROLS
+    # -------------------------------------------------------------
+    st.sidebar.header("📊 Campus Overview & Scale")
+    sb1, sb2 = st.sidebar.columns(2)
+    sb1.metric("🏛️ Buildings", graph_summary["num_buildings"])
+    sb2.metric("🛣️ Walkways", graph_summary["num_paths"])
 
-    # Main Tabs
+    sb3, sb4 = st.sidebar.columns(2)
+    sb3.metric("🚪 Classrooms", len(solver_instance.rooms))
+    sb4.metric("📚 Courses", len(solver_instance.courses))
+
+    sb5, sb6 = st.sidebar.columns(2)
+    sb5.metric("👨‍🏫 Faculty", len(solver_instance.instructors))
+    sb6.metric("⏰ Time Slots", len(solver_instance.time_slots))
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(
+        "**Graph Properties**\n"
+        f"- Type: **Undirected, Weighted ($w > 0$)**\n"
+        f"- Accessible Paths: **{graph_summary['num_accessible_paths']}/{graph_summary['num_paths']}**\n"
+        f"- Covered Walkways: **{graph_summary['num_covered_paths']}/{graph_summary['num_paths']}**\n"
+        f"- Connected: **{'Yes ✅' if graph_summary['is_connected'] else 'No ❌'}**"
+    )
+    st.sidebar.markdown("---")
+    st.sidebar.caption("💡 Designed for Discrete Mathematics Academic Review")
+
+    # -------------------------------------------------------------
+    # MAIN NAVIGATION TABS
+    # -------------------------------------------------------------
     tab_nav, tab_sched, tab_alloc, tab_theory = st.tabs([
         "📍 Module 1: Campus Navigation",
         "📅 Module 2: Classroom Scheduling",
@@ -99,7 +134,7 @@ def main():
     # TAB 1: CAMPUS NAVIGATION
     # -------------------------------------------------------------
     with tab_nav:
-        st.subheader("Interactive Graph Navigation (Dijkstra vs. A* Search)")
+        st.subheader("Interactive Graph Navigation & Algorithm Benchmarking")
         st.markdown(
             "Find the most efficient walking route between campus facilities. "
             "Compare uniform-cost Dijkstra search against goal-directed $A^*$ heuristic search."
@@ -128,8 +163,8 @@ def main():
             goal_id = building_options[goal_label]
 
             algorithm_choice = st.radio(
-                "Select Pathfinding Algorithm:",
-                options=["Dijkstra's Algorithm", "A* (A-Star) Algorithm"],
+                "Select Primary Pathfinding Algorithm:",
+                options=["Dijkstra's Algorithm", "A* (A-Star) Algorithm", "Compare Both Side-by-Side"],
                 help="Dijkstra explores uniformly outward. A* guides search toward destination using straight-line Euclidean distance."
             )
 
@@ -138,6 +173,12 @@ def main():
                 value=False,
                 help="Filters graph to exclude stairways and steep slopes (e.g. bypasses stairs between Library and Activity Center)."
             )
+
+            # Accessibility mode indication banner
+            if accessible_only:
+                st.info("♿ **Accessibility Mode Active**: Routing strictly via ramps and step-free paths.")
+            else:
+                st.caption("🟢 **Standard Walkway Mode**: Includes stairs, sheltered walkways, and direct paths.")
 
             find_btn = st.button("🚀 Find Optimal Route", type="primary", use_container_width=True)
 
@@ -149,21 +190,32 @@ def main():
             )
             pathfinder = CampusPathfinder(active_graph)
 
-            if start_id == goal_id:
-                st.warning("⚠️ Origin and Destination are the same building! Distance is 0 meters.")
-                highlight_path = [start_id]
-                route_result = None
-            else:
-                if "Dijkstra" in algorithm_choice:
-                    route_result = pathfinder.find_shortest_path_dijkstra(start_id, goal_id)
-                else:
-                    route_result = pathfinder.find_shortest_path_astar(start_id, goal_id)
+            route_result = None
+            comparison_result = None
+            highlight_path = None
 
-                if "error" in route_result:
-                    st.error(f"❌ {route_result['error']}")
-                    highlight_path = None
+            with st.spinner("Computing optimal graph path..."):
+                if start_id == goal_id:
+                    st.warning("⚠️ Origin and Destination are the same building! Distance is 0 meters.")
+                    highlight_path = [start_id]
                 else:
-                    highlight_path = route_result["path"]
+                    try:
+                        if algorithm_choice == "Compare Both Side-by-Side":
+                            comparison_result = pathfinder.compare_algorithms(start_id, goal_id)
+                            route_result = comparison_result["astar"]
+                        elif "Dijkstra" in algorithm_choice:
+                            route_result = pathfinder.find_shortest_path_dijkstra(start_id, goal_id)
+                        else:
+                            route_result = pathfinder.find_shortest_path_astar(start_id, goal_id)
+
+                        if route_result and "error" in route_result:
+                            st.error(f"❌ {route_result['error']}")
+                            highlight_path = None
+                        elif route_result:
+                            highlight_path = route_result["path"]
+                    except Exception as e:
+                        st.error(f"❌ Pathfinding Error: {str(e)}")
+                        highlight_path = None
 
             fig = create_campus_map_figure(
                 graph=active_graph,
@@ -172,7 +224,8 @@ def main():
             )
             st.plotly_chart(fig, use_container_width=True)
 
-        if route_result and "error" not in route_result:
+        # Route Metrics and Turn-by-Turn Directions
+        if route_result and "error" not in route_result and len(route_result["path"]) > 1:
             st.markdown("---")
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("🚶 Total Walk Distance", f"{route_result['total_distance']} m")
@@ -180,22 +233,69 @@ def main():
             m3.metric("📍 Number of Stops", f"{len(route_result['path'])}")
             m4.metric("🔍 Nodes Explored", f"{route_result['nodes_explored']}")
 
+            # ---------------------------------------------------------
+            # DIJKSTRA VS A* BENCHMARK COMPARISON SECTION
+            # ---------------------------------------------------------
+            st.markdown("### ⚖️ Algorithm Performance Benchmark: Dijkstra vs. A*")
+            comp = pathfinder.compare_algorithms(start_id, goal_id)
+
+            b1, b2, b3 = st.columns(3)
+            b1.metric("Dijkstra Nodes Explored", comp["dijkstra"]["nodes_explored"])
+            b2.metric("A* Nodes Explored", comp["astar"]["nodes_explored"], delta=f"-{comp['nodes_saved_by_astar']} nodes" if comp['nodes_saved_by_astar'] > 0 else "Equal")
+            b3.metric("A* Runtime", f"{comp['astar'].get('execution_time_ms', 0)} ms")
+
+            bench_df = pd.DataFrame([
+                {
+                    "Algorithm": "Dijkstra's Algorithm",
+                    "Total Distance (m)": comp["dijkstra"]["total_distance"],
+                    "Nodes Visited": comp["dijkstra"]["nodes_explored"],
+                    "Execution Time (ms)": comp["dijkstra"].get("execution_time_ms", 0),
+                    "Heuristic Used": "None (Blind Search)",
+                    "Optimal?": "Guaranteed"
+                },
+                {
+                    "Algorithm": "A* (A-Star) Algorithm",
+                    "Total Distance (m)": comp["astar"]["total_distance"],
+                    "Nodes Visited": comp["astar"]["nodes_explored"],
+                    "Execution Time (ms)": comp["astar"].get("execution_time_ms", 0),
+                    "Heuristic Used": "Euclidean Distance",
+                    "Optimal?": "Guaranteed (Admissible h)"
+                }
+            ])
+            st.dataframe(bench_df, use_container_width=True, hide_index=True)
+
+            if comp["optimal_match"]:
+                st.success("✅ **Mathematical Optimality Verified**: Both Dijkstra and A* found the identical shortest distance!")
+
+            # Itinerary and CSV Download
             with st.expander("📋 Turn-by-Turn Route Itinerary", expanded=True):
                 steps = []
                 for idx, bid in enumerate(route_result["path"]):
                     b_info = campus_graph.get_building_info(bid)
                     if idx == 0:
-                        desc = f"**Start at {b_info['name']}** ({b_info['category']})"
+                        desc = f"Start at {b_info['name']} ({b_info['category']})"
                     elif idx == len(route_result["path"]) - 1:
                         prev_bid = route_result["path"][idx - 1]
                         edge_w = active_graph[prev_bid][bid]["weight"]
-                        desc = f"**Arrive at {b_info['name']}** (+{edge_w}m walk)"
+                        desc = f"Arrive at {b_info['name']} (+{edge_w}m walk)"
                     else:
                         prev_bid = route_result["path"][idx - 1]
                         edge_w = active_graph[prev_bid][bid]["weight"]
-                        desc = f"Walk to **{b_info['name']}** (+{edge_w}m)"
+                        desc = f"Walk to {b_info['name']} (+{edge_w}m)"
                     steps.append({"Step": idx + 1, "Building ID": bid, "Directions": desc})
-                st.table(pd.DataFrame(steps))
+                
+                steps_df = pd.DataFrame(steps)
+                st.table(steps_df)
+
+                # CSV Download Button for Route Itinerary
+                route_csv = steps_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="📥 Download Route Itinerary (CSV)",
+                    data=route_csv,
+                    file_name=f"route_{start_id}_to_{goal_id}.csv",
+                    mime="text/csv",
+                    help="Export the step-by-step route directions as a CSV file."
+                )
 
     # -------------------------------------------------------------
     # TAB 2: CLASSROOM SCHEDULING (OR-TOOLS CP-SAT)
@@ -217,10 +317,18 @@ def main():
             )
             solve_btn = st.button("⚡ Generate Conflict-Free Schedule", type="primary", use_container_width=True)
 
-        # Solve schedule
-        schedule_result = solver_instance.solve(optimize_capacity=optimize_cap)
+        with st.spinner("Solving propositional constraints with Google OR-Tools CP-SAT..."):
+            try:
+                schedule_result = solver_instance.solve(optimize_capacity=optimize_cap)
+            except Exception as e:
+                schedule_result = {
+                    "status": "ERROR",
+                    "error": f"Solver exception: {str(e)}",
+                    "schedule": [],
+                    "schedule_df": pd.DataFrame()
+                }
 
-        if schedule_result["status"] in ("OPTIMAL", "FEASIBLE"):
+        if schedule_result.get("status") in ("OPTIMAL", "FEASIBLE"):
             st.success(
                 f"✅ **Schedule Found ({schedule_result['status']})** in "
                 f"**{schedule_result['solve_time_sec']} seconds**!"
@@ -240,6 +348,16 @@ def main():
                 "Day", "Period", "Time Slot", "Course", "Instructor", "Room", "Enrolled", "Capacity", "Utilization %"
             ]
             st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+            # CSV Download Button for Timetable
+            sched_csv = display_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="📥 Download Weekly Timetable (CSV)",
+                data=sched_csv,
+                file_name="campus_weekly_schedule.csv",
+                mime="text/csv",
+                help="Export the generated timetable as a CSV spreadsheet."
+            )
 
             with st.expander("🔍 Mathematical Verification of Hard Constraints"):
                 st.write("1. **Room Conflict Check**: Checked all (room, slot) combinations $\\implies$ **No overlapping classes**.")
@@ -285,6 +403,17 @@ def main():
 
         st.markdown("### 📋 Classroom Allocation Detail & Health Status")
         st.dataframe(util_df, use_container_width=True, hide_index=True)
+
+        # CSV Download for Resource Allocation
+        if not util_df.empty:
+            util_csv = util_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="📥 Download Utilization Report (CSV)",
+                data=util_csv,
+                file_name="room_utilization_report.csv",
+                mime="text/csv",
+                help="Export the space utilization report as a CSV spreadsheet."
+            )
 
         idle_info = resource_mgr.get_idle_rooms_analysis()
         if idle_info["idle_rooms_count"] > 0:
