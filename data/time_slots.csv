@@ -1,0 +1,17 @@
+slot_id,day,period,start_time,end_time
+TS1,Monday,P1,09:00,10:30
+TS2,Monday,P2,11:00,12:30
+TS3,Monday,P3,13:30,15:00
+TS4,Tuesday,P1,09:00,10:30
+TS5,Tuesday,P2,11:00,12:30
+TS6,Tuesday,P3,13:30,15:00
+TS7,Wednesday,P1,09:00,10:30
+TS8,Wednesday,P2,11:00,12:30
+TS9,Wednesday,P3,13:30,15:00
+TS10,Thursday,P1,09:00,10:30
+TS11,Thursday,P2,11:00,12:30
+TS12,Thursday,P3,13:30,15:00
+TS13,Friday,P1,09:00,10:30
+TS14,Friday,P2,11:00,12:30
+TS15,Friday,P3,13:30,15:00
+

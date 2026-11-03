@@ -1,0 +1,9 @@
+room_id,building_id,name,capacity,is_lab
+R101,B4,Hall 101,60,False
+R102,B4,Hall 102,40,False
+R201,B5,CS Lab 1,35,True
+R202,B5,CS Lab 2,30,True
+R301,B8,Mech Lab,25,True
+R401,B2,Seminar Room A,80,False
+R402,B2,Conference Hall,120,False
+

@@ -1,0 +1,12 @@
+building_id,name,x,y,category
+B1,Main Gate,50,50,Entrance
+B2,Administrative Block,150,90,Administration
+B3,Central Library,220,180,Library
+B4,Science & Engineering Block,340,100,Academic
+B5,Computer Science Lab Complex,350,240,Academic
+B6,Student Activity Center,180,320,Amenities
+B7,Sports Arena & Gymnasium,80,250,Sports
+B8,Mechanical Workshop,450,160,Academic
+B9,University Auditorium,260,380,Auditorium
+B10,Health & Wellness Center,100,390,Medical
+

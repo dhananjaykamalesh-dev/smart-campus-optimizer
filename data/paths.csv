@@ -1,0 +1,17 @@
+source,target,distance_m,is_accessible,is_covered
+B1,B2,120,True,True
+B1,B7,210,True,False
+B2,B3,130,True,True
+B2,B4,200,True,False
+B3,B4,150,True,False
+B3,B5,150,True,True
+B3,B6,160,False,True
+B4,B8,135,True,False
+B5,B8,140,True,False
+B5,B9,175,True,False
+B6,B7,130,True,False
+B6,B9,110,True,True
+B6,B10,115,True,False
+B7,B10,150,True,False
+B9,B10,170,False,False
+

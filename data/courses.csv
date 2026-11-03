@@ -1,0 +1,9 @@
+course_id,name,instructor_id,enrolled_students,requires_lab
+CS101,Discrete Mathematics,INS01,55,False
+CS102,Data Structures Lab,INS02,32,True
+CS103,Algorithms,INS01,48,False
+ME201,Thermodynamics Workshop,INS03,24,True
+EE101,Circuit Theory,INS04,38,False
+CS204,Artificial Intelligence Lab,INS02,28,True
+HS101,Professional Ethics,INS05,75,False
+
