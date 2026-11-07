@@ -106,7 +106,8 @@ class CampusTimetableSolver:
     def solve(
         self,
         optimize_capacity: bool = True,
-        forbidden_rooms: Optional[Set[str]] = None
+        forbidden_rooms: Optional[Set[str]] = None,
+        soft_penalties: Optional[Dict[Tuple[str, str, str], int]] = None
     ) -> Dict[str, Any]:
         """
         Builds the CP-SAT model, sets constraints, and finds a conflict-free schedule.
@@ -114,6 +115,8 @@ class CampusTimetableSolver:
         Args:
             optimize_capacity: If True, minimizes wasted seats in assigned rooms.
             forbidden_rooms: Optional set of room IDs excluded from assignment (out of service).
+            soft_penalties: Optional dictionary mapping (course_id, room_id, slot_id)
+                           to penalty weights for soft preference optimization.
 
         Returns:
             Dictionary with solver status, runtime, metrics, and schedule list/DataFrame.
@@ -180,13 +183,19 @@ class CampusTimetableSolver:
                 if teacher_assignments:
                     model.AddAtMostOne(teacher_assignments)
 
-        # Soft Objective: Minimize wasted seats
-        if optimize_capacity:
-            wastage_terms = []
+        # Objective: Minimize wasted seats and soft preference penalties
+        if optimize_capacity or soft_penalties:
+            objective_terms = []
             for (c_id, r_id, s_id), var in x_vars.items():
-                waste = self.rooms[r_id]["capacity"] - self.courses[c_id]["enrolled_students"]
-                wastage_terms.append(var * waste)
-            model.Minimize(sum(wastage_terms))
+                cost = 0
+                if optimize_capacity:
+                    cost += self.rooms[r_id]["capacity"] - self.courses[c_id]["enrolled_students"]
+                if soft_penalties and (c_id, r_id, s_id) in soft_penalties:
+                    cost += soft_penalties[(c_id, r_id, s_id)]
+                if cost > 0:
+                    objective_terms.append(var * cost)
+            if objective_terms:
+                model.Minimize(sum(objective_terms))
 
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = 10.0
@@ -572,3 +581,34 @@ class CampusTimetableSolver:
             "repaired_schedule": repaired_schedule,
             "repaired_schedule_df": repaired_df
         }
+
+    def solve_with_demand_prediction(
+        self,
+        predictor: Any,
+        penalty_scale: int = 2,
+        forbidden_rooms: Optional[Set[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        [EXPERIMENTAL] Solves the timetable incorporating soft penalties derived
+        from baseline historical demand prediction.
+
+        Args:
+            predictor: CampusDemandPredictor instance.
+            penalty_scale: Weight of soft penalties in the objective function.
+            forbidden_rooms: Optional set of unavailable room IDs.
+
+        Returns:
+            Dictionary with solver status, runtime, metrics, and schedule list/DataFrame.
+        """
+        soft_penalties = predictor.compute_soft_preference_penalties(
+            courses=self.courses,
+            rooms=self.rooms,
+            time_slots=self.time_slots,
+            penalty_scale=penalty_scale
+        )
+        return self.solve(
+            optimize_capacity=True,
+            forbidden_rooms=forbidden_rooms,
+            soft_penalties=soft_penalties
+        )
+

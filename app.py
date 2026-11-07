@@ -18,6 +18,7 @@ from src.navigation.graph_builder import CampusGraph
 from src.navigation.pathfinder import CampusPathfinder
 from src.scheduling.timetable_solver import CampusTimetableSolver
 from src.allocation.resource_manager import CampusResourceManager
+from src.prediction.demand_predictor import CampusDemandPredictor
 from src.utils.visualizer import (
     create_campus_map_figure,
     create_utilization_bar_chart,
@@ -42,13 +43,15 @@ ROOMS_CSV = os.path.join(DATA_DIR, "rooms.csv")
 COURSES_CSV = os.path.join(DATA_DIR, "courses.csv")
 INSTRUCTORS_CSV = os.path.join(DATA_DIR, "instructors.csv")
 TIME_SLOTS_CSV = os.path.join(DATA_DIR, "time_slots.csv")
+HISTORICAL_DEMAND_CSV = os.path.join(DATA_DIR, "historical_demand.csv")
 
 
 def check_data_files() -> bool:
     """Verifies that all required CSV data files exist."""
     required = [
         BUILDINGS_CSV, PATHS_CSV, ROOMS_CSV,
-        COURSES_CSV, INSTRUCTORS_CSV, TIME_SLOTS_CSV
+        COURSES_CSV, INSTRUCTORS_CSV, TIME_SLOTS_CSV,
+        HISTORICAL_DEMAND_CSV
     ]
     missing = [f for f in required if not os.path.exists(f)]
     if missing:
@@ -73,6 +76,12 @@ def load_timetable_solver() -> CampusTimetableSolver:
         instructors_file=INSTRUCTORS_CSV,
         time_slots_file=TIME_SLOTS_CSV
     )
+
+
+@st.cache_resource
+def load_demand_predictor() -> CampusDemandPredictor:
+    """Loads and caches the historical demand predictor instance."""
+    return CampusDemandPredictor(historical_csv_path=HISTORICAL_DEMAND_CSV)
 
 
 def main():
@@ -516,6 +525,74 @@ def main():
                 st.success(f"✅ Room **{disruption_info['room_name']}** has no assigned courses in the current schedule. No relocation needed!")
         else:
             st.error(f"❌ Timetable solver failed: {schedule_result.get('error', 'Infeasible constraints')}")
+
+        # ---------------------------------------------------------
+        # EXPERIMENTAL: DEMAND PREDICTION & SOFT PREFERENCE SCHEDULING
+        # ---------------------------------------------------------
+        st.markdown("---")
+        st.subheader("🧪 [Experimental] Historical Demand Forecasting & Soft Preferences")
+        st.markdown(
+            "This module uses a **Moving Average time-series baseline** on 4 weeks of historical attendance records "
+            "to predict high-demand vs. low-demand periods. Predicted demand is incorporated into Google OR-Tools CP-SAT "
+            "as a **soft preference objective** to guide optimal room utilization without violating any hard constraints."
+        )
+
+        demand_predictor = load_demand_predictor()
+        col_w, col_btn = st.columns([2, 1])
+        with col_w:
+            window_size = st.slider("Moving Average Window (Weeks)", min_value=1, max_value=4, value=3)
+        with col_btn:
+            st.write("")
+            st.write("")
+            run_demand_opt = st.button("✨ Solve with Demand Soft Preferences", type="secondary")
+
+        summary_demand_df = demand_predictor.get_slot_demand_summary(window_size=window_size)
+
+        # Visualizing Predicted Demand
+        if not summary_demand_df.empty:
+            st.markdown("##### 📈 Predicted Attendance per Time Slot")
+            import plotly.express as px
+            fig_demand = px.bar(
+                summary_demand_df,
+                x="Slot ID",
+                y="Predicted Attendance",
+                color="Demand Level",
+                color_discrete_map={
+                    "High Peak": "#e74c3c",
+                    "Moderate": "#1abc9c",
+                    "Low Demand": "#3498db"
+                },
+                hover_data=["Day", "Period"],
+                title=f"Predicted Campus Attendance by Slot (Moving Average Window = {window_size} Weeks)"
+            )
+            fig_demand.update_layout(xaxis_title="Time Slot", yaxis_title="Predicted Students", height=350)
+            st.plotly_chart(fig_demand, use_container_width=True)
+
+        if run_demand_opt:
+            with st.spinner("Solving CP-SAT model with demand-aware soft preferences..."):
+                demand_res = solver_instance.solve_with_demand_prediction(
+                    predictor=demand_predictor,
+                    penalty_scale=2
+                )
+            if demand_res["status"] in ("OPTIMAL", "FEASIBLE"):
+                st.success(f"✅ **Demand-Aware Timetable Found ({demand_res['status']})** in {demand_res['solve_time_sec']}s!")
+                demand_sched_df = demand_res["schedule_df"][[
+                    "day", "period", "time", "course_name", "instructor", "room_name", "enrolled", "capacity", "utilization_pct"
+                ]].copy()
+                demand_sched_df.columns = [
+                    "Day", "Period", "Time Slot", "Course", "Instructor", "Room", "Enrolled", "Capacity", "Utilization %"
+                ]
+                st.dataframe(demand_sched_df, use_container_width=True, hide_index=True)
+
+                d_csv = demand_sched_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="📥 Download Demand-Optimized Timetable (CSV)",
+                    data=d_csv,
+                    file_name="campus_demand_optimized_timetable.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.error(f"❌ Solver failed: {demand_res.get('error')}")
 
     # -------------------------------------------------------------
     # TAB 3: RESOURCE ALLOCATION & UTILIZATION

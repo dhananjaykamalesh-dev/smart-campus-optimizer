@@ -144,3 +144,27 @@ This guide contains the most critical viva and presentation questions for this p
 > - No 'file not found' errors appear
 >
 > If a bad import is added to `app.py`, or a CSV file is accidentally deleted, the smoke tests catch it in seconds — even on GitHub Actions, without any human running the app."
+
+
+---
+
+### Q16: How does your experimental demand-prediction module work?
+**Answer:**
+> "Our demand-prediction module (`src/prediction/demand_predictor.py`) uses an interpretable **Moving Average (MA) baseline model** computed over 4 weeks of historical attendance data across 15 campus time slots:
+>
+> $$\hat{D}_{s} = \frac{1}{K} \sum_{k=1}^K D_{s, W-k+1}$$
+>
+> Instead of using an opaque machine learning black box, this time-series moving average gives transparent, explainable predictions of student turnout for each slot. We categorize each time slot into **High Peak** ($\ge 50$ students), **Moderate**, or **Low Demand**."
+
+---
+
+### Q17: How is predicted demand integrated into the CP-SAT timetable solver without causing infeasibility?
+**Answer:**
+> "We integrate demand predictions as **linear soft preferences (penalties)** in the CP-SAT objective function rather than hard constraints:
+>
+> $$\min \sum_{c, r, s} X_{c,r,s} \cdot \Big( (\text{Capacity}_r - \text{Enrolled}_c) + \text{Penalty}_{c,r,s} \Big)$$
+>
+> - **Hard constraints** (room conflict-free, instructor conflict-free, lab requirements) are strictly enforced.
+> - **Soft preferences** gently penalize assignments that place small courses into high-capacity rooms during peak demand time slots.
+>
+> This guarantees that the solver **always finds a mathematically valid schedule** without risking infeasibility, while prioritizing space efficiency."

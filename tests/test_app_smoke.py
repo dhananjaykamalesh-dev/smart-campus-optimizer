@@ -55,6 +55,7 @@ SRC_DIR = PROJECT_ROOT / "src"
     "src.navigation.pathfinder",
     "src.scheduling.timetable_solver",
     "src.allocation.resource_manager",
+    "src.prediction.demand_predictor",
     "src.utils.visualizer",
 ])
 def test_source_modules_import_cleanly(module_path):
@@ -101,6 +102,7 @@ def test_source_modules_import_cleanly(module_path):
     "courses.csv",
     "instructors.csv",
     "time_slots.csv",
+    "historical_demand.csv",
 ])
 def test_data_files_exist(csv_file):
     """
