@@ -1,4 +1,4 @@
-"""
+r"""
 Module: visualizer.py
 Purpose: Renders interactive campus maps and analytics charts using Plotly.
 

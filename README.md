@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.30%2B-red?logo=streamlit)](https://streamlit.io)
 [![OR-Tools](https://img.shields.io/badge/Google%20OR--Tools-CP--SAT-green)](https://developers.google.com/optimization)
-[![Tests](https://img.shields.io/badge/Tests-27%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-40%20passing-brightgreen)](tests/)
 [![CI](https://github.com/dhananjaykamalesh-dev/smart-campus-optimizer/actions/workflows/tests.yml/badge.svg)](https://github.com/dhananjaykamalesh-dev/smart-campus-optimizer/actions)
 
 ---

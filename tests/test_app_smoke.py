@@ -135,11 +135,11 @@ def test_buildings_csv_has_required_columns():
     """
     Smoke Test: buildings.csv has all columns that CampusGraph expects.
 
-    The graph builder reads: building_id, name, x_coord, y_coord, accessible.
+    The graph builder reads: building_id, name, x, y, category.
     If a column is renamed or deleted, the app crashes on startup.
     """
     df = pd.read_csv(DATA_DIR / "buildings.csv")
-    required_cols = {"building_id", "name", "x_coord", "y_coord", "accessible"}
+    required_cols = {"building_id", "name", "x", "y", "category"}
     missing = required_cols - set(df.columns)
     assert not missing, (
         f"buildings.csv is missing columns: {missing}\n"
@@ -152,10 +152,10 @@ def test_paths_csv_has_required_columns():
     """
     Smoke Test: paths.csv has all columns that CampusGraph expects.
 
-    The graph builder reads: from_building, to_building, distance_m, accessible.
+    The graph builder reads: source, target, distance_m, is_accessible, is_covered.
     """
     df = pd.read_csv(DATA_DIR / "paths.csv")
-    required_cols = {"from_building", "to_building", "distance_m", "accessible"}
+    required_cols = {"source", "target", "distance_m", "is_accessible", "is_covered"}
     missing = required_cols - set(df.columns)
     assert not missing, (
         f"paths.csv is missing columns: {missing}\n"
@@ -169,7 +169,7 @@ def test_rooms_csv_has_required_columns():
     Smoke Test: rooms.csv has all columns that the scheduling solver expects.
     """
     df = pd.read_csv(DATA_DIR / "rooms.csv")
-    required_cols = {"room_id", "capacity", "is_lab"}
+    required_cols = {"room_id", "building_id", "name", "capacity", "is_lab"}
     missing = required_cols - set(df.columns)
     assert not missing, (
         f"rooms.csv is missing columns: {missing}\n"
@@ -182,7 +182,7 @@ def test_courses_csv_has_required_columns():
     Smoke Test: courses.csv has all columns that the scheduling solver expects.
     """
     df = pd.read_csv(DATA_DIR / "courses.csv")
-    required_cols = {"course_id", "enrolled_students", "needs_lab"}
+    required_cols = {"course_id", "name", "instructor_id", "enrolled_students", "requires_lab"}
     missing = required_cols - set(df.columns)
     assert not missing, (
         f"courses.csv is missing columns: {missing}\n"
@@ -232,28 +232,28 @@ def test_timetable_solver_instantiates():
         instructors_file=str(DATA_DIR / "instructors.csv"),
         time_slots_file=str(DATA_DIR / "time_slots.csv")
     )
-    # Should have loaded some courses
-    assert len(solver.courses_df) >= 1, (
+    # Should have loaded courses and rooms dictionaries
+    assert len(solver.courses) >= 1, (
         "TimetableSolver loaded 0 courses — check courses.csv"
     )
-    assert len(solver.rooms_df) >= 1, (
+    assert len(solver.rooms) >= 1, (
         "TimetableSolver loaded 0 rooms — check rooms.csv"
     )
 
 
 def test_resource_manager_instantiates():
     """
-    Smoke Test: CampusResourceManager can be created from the real CSV files.
+    Smoke Test: CampusResourceManager can be created using empty or dummy schedule records.
 
-    This verifies the allocation module reads rooms and courses correctly.
+    This verifies the allocation module can initialize and operate on room data.
     """
     from src.allocation.resource_manager import CampusResourceManager
 
+    # Test with dummy schedule record and room dictionary
     manager = CampusResourceManager(
-        rooms_file=str(DATA_DIR / "rooms.csv"),
-        courses_file=str(DATA_DIR / "courses.csv")
+        schedule_records=[],
+        all_rooms={"R101": {"room_id": "R101", "name": "Room 101", "capacity": 50, "is_lab": False}}
     )
-    # Should have loaded some rooms
-    assert len(manager.rooms_df) >= 1, (
-        "ResourceManager loaded 0 rooms — check rooms.csv"
-    )
+    assert manager.all_rooms is not None
+    idle_analysis = manager.get_idle_rooms_analysis()
+    assert idle_analysis["idle_rooms_count"] == 1
